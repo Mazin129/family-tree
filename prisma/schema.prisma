@@ -1,0 +1,513 @@
+// Sudanese Heritage Platform - PostgreSQL Schema
+// Handles: users, auth, cultural content, community features
+// Family tree graph data lives in Neo4j
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────
+// AUTH & USERS
+// ─────────────────────────────────────────────
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model User {
+  id                String    @id @default(cuid())
+  name              String?
+  nameArabic        String?   // Arabic name
+  email             String?   @unique
+  emailVerified     DateTime?
+  image             String?
+  password          String?   // hashed, for credential auth
+  role              UserRole  @default(MEMBER)
+  preferredLanguage Language  @default(ARABIC)
+  isActive          Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  // Profile
+  profile           UserProfile?
+
+  // Relations
+  accounts          Account[]
+  sessions          Session[]
+  familyTrees       FamilyTree[]
+  treeMembers       TreeMember[]
+  communityPosts    CommunityPost[]
+  oralHistories     OralHistory[]
+  heritageItems     HeritageItem[]
+  collaborations    TreeCollaboration[]
+  notifications     Notification[]
+  privacySettings   PrivacySettings?
+  auditLogs         AuditLog[]
+
+  @@index([email])
+}
+
+model UserProfile {
+  id              String    @id @default(cuid())
+  userId          String    @unique
+  bio             String?   @db.Text
+  bioArabic       String?   @db.Text
+  tribe           String?
+  region          Region?
+  country         String?   @default("Sudan")
+  diasporaCity    String?
+  diasporaCountry String?
+  phone           String?
+  birthYear       Int?
+  occupation      String?
+  linkedinUrl     String?
+  bannerImage     String?
+  isPublic        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ─────────────────────────────────────────────
+// FAMILY TREE
+// ─────────────────────────────────────────────
+
+model FamilyTree {
+  id              String   @id @default(cuid())
+  ownerId         String
+  name            String
+  nameArabic      String?
+  description     String?  @db.Text
+  descriptionAr   String?  @db.Text
+  tribe           String?
+  clan            String?
+  region          Region?
+  isPublic        Boolean  @default(false)
+  neo4jTreeId     String?  @unique  // Reference to Neo4j subgraph
+  coverImage      String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  owner          User                 @relation(fields: [ownerId], references: [id])
+  members        TreeMember[]
+  collaborations TreeCollaboration[]
+  tags           FamilyTreeTag[]
+
+  @@index([ownerId])
+}
+
+model TreeMember {
+  id              String          @id @default(cuid())
+  treeId          String
+  userId          String?         // If this member is also a registered user
+  neo4jPersonId   String          // ID in Neo4j graph
+
+  // Identity
+  fullName        String
+  fullNameArabic  String?
+  nickname        String?
+  nicknameArabic  String?
+  fatherName      String?
+  grandfatherName String?
+  tribe           String?
+  clan            String?
+  lineage         String?         // نسب / lineage string
+  gender          Gender
+  isAlive         Boolean         @default(true)
+
+  // Dates
+  birthYear       Int?
+  birthDate       DateTime?
+  deathYear       Int?
+  deathDate       DateTime?
+  birthPlace      String?
+  birthRegion     Region?
+  deathPlace      String?
+
+  // Bio
+  bio             String?         @db.Text
+  bioArabic       String?         @db.Text
+  occupation      String?
+  occupationArabic String?
+  photo           String?
+
+  // Privacy
+  privacyLevel    PrivacyLevel    @default(FAMILY)
+  isAnonymized    Boolean         @default(false)  // GDPR
+
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  tree   FamilyTree @relation(fields: [treeId], references: [id], onDelete: Cascade)
+  user   User?      @relation(fields: [userId], references: [id])
+
+  @@index([treeId])
+  @@index([neo4jPersonId])
+}
+
+model FamilyTreeTag {
+  id     String     @id @default(cuid())
+  treeId String
+  tag    String
+
+  tree FamilyTree @relation(fields: [treeId], references: [id], onDelete: Cascade)
+
+  @@unique([treeId, tag])
+}
+
+model TreeCollaboration {
+  id         String            @id @default(cuid())
+  treeId     String
+  userId     String
+  role       CollaboratorRole  @default(VIEWER)
+  invitedAt  DateTime          @default(now())
+  acceptedAt DateTime?
+
+  tree FamilyTree @relation(fields: [treeId], references: [id], onDelete: Cascade)
+  user User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([treeId, userId])
+}
+
+// ─────────────────────────────────────────────
+// COMMUNITY & CULTURE
+// ─────────────────────────────────────────────
+
+model CommunityPost {
+  id          String      @id @default(cuid())
+  authorId    String
+  title       String
+  titleArabic String?
+  content     String      @db.Text
+  contentAr   String?     @db.Text
+  category    PostCategory
+  tribe       String?
+  region      Region?
+  tags        String[]
+  images      String[]
+  isPublished Boolean     @default(true)
+  isPinned    Boolean     @default(false)
+  viewCount   Int         @default(0)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  author   User          @relation(fields: [authorId], references: [id])
+  comments PostComment[]
+  likes    PostLike[]
+
+  @@index([authorId])
+  @@index([category])
+}
+
+model PostComment {
+  id        String   @id @default(cuid())
+  postId    String
+  authorId  String
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+
+  post CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+}
+
+model PostLike {
+  postId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  post CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@id([postId, userId])
+}
+
+// ─────────────────────────────────────────────
+// ORAL HISTORY & HERITAGE
+// ─────────────────────────────────────────────
+
+model OralHistory {
+  id            String       @id @default(cuid())
+  uploaderId    String
+  title         String
+  titleArabic   String?
+  description   String?      @db.Text
+  descriptionAr String?      @db.Text
+  narrator      String?
+  region        Region?
+  tribe         String?
+  year          Int?
+  duration      Int?         // seconds
+  mediaUrl      String       // stored in DO Spaces
+  mediaType     MediaType
+  transcript    String?      @db.Text
+  transcriptAr  String?      @db.Text
+  language      Language     @default(ARABIC)
+  isPublic      Boolean      @default(true)
+  tags          String[]
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  uploader User @relation(fields: [uploaderId], references: [id])
+
+  @@index([uploaderId])
+  @@index([tribe])
+}
+
+model HeritageItem {
+  id            String        @id @default(cuid())
+  uploaderId    String
+  title         String
+  titleArabic   String?
+  description   String?       @db.Text
+  descriptionAr String?       @db.Text
+  category      HeritageCategory
+  region        Region?
+  tribe         String?
+  period        String?
+  imageUrl      String?
+  sourceUrl     String?
+  isVerified    Boolean       @default(false)
+  isPublic      Boolean       @default(true)
+  tags          String[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  uploader User @relation(fields: [uploaderId], references: [id])
+}
+
+// ─────────────────────────────────────────────
+// AI / ML RECORDS
+// ─────────────────────────────────────────────
+
+model AIInsight {
+  id           String      @id @default(cuid())
+  treeId       String?
+  memberId     String?
+  insightType  AIInsightType
+  confidence   Float       // 0-1
+  data         Json        // structured insight data
+  isAccepted   Boolean?    // null = pending, true = accepted, false = rejected
+  createdAt    DateTime    @default(now())
+
+  @@index([treeId])
+}
+
+model DuplicateAlert {
+  id              String   @id @default(cuid())
+  treeId          String
+  memberId1       String
+  memberId2       String
+  similarityScore Float
+  isResolved      Boolean  @default(false)
+  resolution      String?
+  createdAt       DateTime @default(now())
+
+  @@index([treeId])
+}
+
+// ─────────────────────────────────────────────
+// PRIVACY & SETTINGS
+// ─────────────────────────────────────────────
+
+model PrivacySettings {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  defaultTreePrivacy PrivacyLevel @default(FAMILY)
+  showProfile        Boolean  @default(true)
+  showInSearch       Boolean  @default(true)
+  allowCollabInvites Boolean  @default(true)
+  dataRetentionDays  Int      @default(365)
+  exportRequested    Boolean  @default(false)
+  deletionRequested  Boolean  @default(false)
+  consentGiven       Boolean  @default(false)
+  consentDate        DateTime?
+  updatedAt          DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String
+  action     String
+  resource   String
+  resourceId String?
+  metadata   Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// ─────────────────────────────────────────────
+// NOTIFICATIONS
+// ─────────────────────────────────────────────
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  message   String
+  link      String?
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+}
+
+// ─────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────
+
+enum UserRole {
+  ADMIN
+  MODERATOR
+  MEMBER
+  GUEST
+}
+
+enum Language {
+  ARABIC
+  ENGLISH
+  BOTH
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  UNSPECIFIED
+}
+
+enum Region {
+  KHARTOUM
+  NORTHERN
+  NILE
+  RED_SEA
+  KASSALA
+  GEDAREF
+  BLUE_NILE
+  SINNAR
+  WHITE_NILE
+  NORTH_KORDOFAN
+  SOUTH_KORDOFAN
+  WEST_KORDOFAN
+  NORTH_DARFUR
+  SOUTH_DARFUR
+  EAST_DARFUR
+  CENTRAL_DARFUR
+  WEST_DARFUR
+  RIVER_NILE
+  GEZIRA
+  SENNAR
+  OTHER
+}
+
+enum PrivacyLevel {
+  PUBLIC
+  COMMUNITY
+  FAMILY
+  PRIVATE
+}
+
+enum CollaboratorRole {
+  VIEWER
+  EDITOR
+  ADMIN
+}
+
+enum PostCategory {
+  HISTORY
+  CULTURE
+  TRADITION
+  FOLKLORE
+  POETRY
+  MUSIC
+  FOOD
+  LANGUAGE
+  GENEALOGY
+  NEWS
+  GENERAL
+}
+
+enum MediaType {
+  AUDIO
+  VIDEO
+  IMAGE
+  DOCUMENT
+}
+
+enum HeritageCategory {
+  CLOTHING
+  MUSIC
+  DANCE
+  FOOD
+  CRAFT
+  ARCHITECTURE
+  LANGUAGE
+  POETRY
+  PROVERB
+  CEREMONY
+  RELIGION
+  OTHER
+}
+
+enum AIInsightType {
+  DUPLICATE_DETECTION
+  MISSING_LINK_SUGGESTION
+  RELATIONSHIP_VALIDATION
+  LINEAGE_PATTERN
+  HISTORICAL_INSIGHT
+  TRIBE_INFERENCE
+  MIGRATION_PATTERN
+}
+
+enum NotificationType {
+  COLLABORATION_INVITE
+  TREE_UPDATE
+  AI_INSIGHT
+  COMMUNITY_REPLY
+  SYSTEM
+  WELCOME
+}

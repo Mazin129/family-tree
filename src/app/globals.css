@@ -1,0 +1,219 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ──────────────────────────────────────────────
+   CSS Custom Properties – Sudanese Design Tokens
+   ────────────────────────────────────────────── */
+:root {
+  --color-primary:    #d4922d;
+  --color-primary-dk: #8f5420;
+  --color-nile:       #1a75e8;
+  --color-sand-light: #fdf8f0;
+  --color-text:       #18181b;
+  --radius-card:      1rem;
+  --shadow-card:      0 2px 15px -3px rgba(0,0,0,.10),0 10px 20px -2px rgba(0,0,0,.04);
+  --font-arabic:      'Cairo', 'Amiri', sans-serif;
+}
+
+/* ──────────────────────────────────────────────
+   RTL / LTR Direction Utilities
+   ────────────────────────────────────────────── */
+[dir="rtl"] {
+  font-family: var(--font-arabic);
+}
+[dir="ltr"] {
+  font-family: 'Inter', var(--font-arabic);
+}
+
+/* ──────────────────────────────────────────────
+   Base Styles
+   ────────────────────────────────────────────── */
+@layer base {
+  * {
+    @apply border-khartoum-200;
+  }
+
+  body {
+    @apply bg-sand-50 text-khartoum-900;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-semibold tracking-tight;
+  }
+
+  /* Arabic text should use Cairo */
+  :lang(ar) {
+    font-family: 'Cairo', 'Amiri', sans-serif;
+    line-height: 1.8;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar        { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track  { @apply bg-sand-100; }
+  ::-webkit-scrollbar-thumb  { @apply bg-sand-400 rounded-full; }
+  ::-webkit-scrollbar-thumb:hover { @apply bg-sand-500; }
+}
+
+/* ──────────────────────────────────────────────
+   Component Classes
+   ────────────────────────────────────────────── */
+@layer components {
+  /* Cards */
+  .card {
+    @apply bg-white rounded-2xl shadow-card border border-sand-100 overflow-hidden;
+  }
+  .card-hover {
+    @apply card transition-all duration-200 hover:shadow-heritage hover:-translate-y-0.5;
+  }
+
+  /* Buttons */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2
+           bg-sand-500 hover:bg-sand-600 text-white font-medium
+           px-5 py-2.5 rounded-xl transition-all duration-200
+           shadow-sm hover:shadow-heritage focus:outline-none
+           focus:ring-2 focus:ring-sand-400 focus:ring-offset-2
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2
+           bg-white hover:bg-sand-50 text-khartoum-800
+           border border-sand-200 hover:border-sand-300
+           font-medium px-5 py-2.5 rounded-xl transition-all duration-200
+           focus:outline-none focus:ring-2 focus:ring-sand-300;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2
+           text-khartoum-600 hover:text-khartoum-900 hover:bg-sand-100
+           font-medium px-4 py-2 rounded-xl transition-all duration-200;
+  }
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2
+           bg-red-600 hover:bg-red-700 text-white font-medium
+           px-5 py-2.5 rounded-xl transition-all duration-200;
+  }
+
+  /* Form inputs */
+  .input {
+    @apply w-full rounded-xl border border-khartoum-200 bg-white px-4 py-2.5
+           text-khartoum-900 placeholder-khartoum-400
+           focus:outline-none focus:ring-2 focus:ring-sand-400 focus:border-transparent
+           transition-all duration-200;
+  }
+  .input-arabic {
+    @apply input text-right;
+    direction: rtl;
+  }
+  .label {
+    @apply block text-sm font-medium text-khartoum-700 mb-1.5;
+  }
+
+  /* Badge */
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+  .badge-sand  { @apply badge bg-sand-100 text-sand-800; }
+  .badge-nile  { @apply badge bg-nile-100 text-nile-800; }
+  .badge-green { @apply badge bg-acacia-100 text-acacia-800; }
+
+  /* Section heading */
+  .section-title {
+    @apply text-2xl font-bold text-khartoum-900;
+  }
+  .section-subtitle {
+    @apply text-khartoum-500 mt-1;
+  }
+
+  /* Heritage divider */
+  .divider-heritage {
+    @apply relative flex items-center my-6;
+  }
+  .divider-heritage::before,
+  .divider-heritage::after {
+    @apply flex-1 border-t border-sand-200 content-[''];
+  }
+  .divider-heritage span {
+    @apply mx-3 text-sand-400 text-sm;
+  }
+
+  /* Navigation link */
+  .nav-link {
+    @apply flex items-center gap-2.5 px-4 py-2.5 rounded-xl
+           text-khartoum-600 hover:text-sand-700 hover:bg-sand-50
+           font-medium transition-all duration-200 text-sm;
+  }
+  .nav-link-active {
+    @apply nav-link bg-sand-50 text-sand-700 border border-sand-200;
+  }
+
+  /* Family tree node */
+  .tree-node {
+    @apply relative bg-white rounded-2xl border-2 border-sand-200
+           shadow-card cursor-pointer transition-all duration-200
+           hover:border-sand-400 hover:shadow-heritage;
+  }
+  .tree-node-male   { @apply tree-node border-nile-300; }
+  .tree-node-female { @apply tree-node border-sahara-300; }
+  .tree-node-selected {
+    @apply border-sand-500 ring-2 ring-sand-300 ring-offset-1;
+  }
+
+  /* Page container */
+  .page-container {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+  }
+  .page-header {
+    @apply py-8 border-b border-sand-200;
+  }
+
+  /* Cultural pattern overlay */
+  .pattern-overlay {
+    background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23d4922d' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+  }
+}
+
+/* ──────────────────────────────────────────────
+   Family Tree Visualization Styles
+   ────────────────────────────────────────────── */
+.tree-container {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: linear-gradient(135deg, #fdf8f0 0%, #fff 100%);
+}
+
+.tree-link {
+  fill: none;
+  stroke: #e4ddb0;
+  stroke-width: 1.5px;
+  stroke-dasharray: none;
+}
+.tree-link-spouse {
+  stroke: #f6ba77;
+  stroke-dasharray: 5 3;
+}
+
+/* ──────────────────────────────────────────────
+   Print Styles
+   ────────────────────────────────────────────── */
+@media print {
+  .no-print { display: none !important; }
+  body { background: white; }
+  .card { box-shadow: none; border: 1px solid #ddd; }
+}
+
+/* ──────────────────────────────────────────────
+   Animations
+   ────────────────────────────────────────────── */
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+
+.skeleton {
+  background: linear-gradient(90deg, #f0e8d8 25%, #faefd8 50%, #f0e8d8 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}

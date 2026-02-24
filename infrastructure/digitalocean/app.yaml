@@ -1,0 +1,105 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# DigitalOcean App Platform Spec
+# Sudanese Heritage Platform
+# Deploy: doctl apps create --spec infrastructure/digitalocean/app.yaml
+# ─────────────────────────────────────────────────────────────────────────────
+
+name:   sudanese-heritage
+region: fra  # Frankfurt (closest to Sudan/MENA)
+
+# ── Services ─────────────────────────────────────────────────────────────────
+services:
+  - name: web
+    github:
+      repo:           YOUR_GITHUB_ORG/family-tree
+      branch:         main
+      deploy_on_push: true
+    dockerfile_path: Dockerfile
+    instance_size_slug: professional-xs
+    instance_count: 2
+    http_port: 3000
+    health_check:
+      http_path:           /api/health
+      initial_delay_seconds: 40
+      period_seconds:      30
+      failure_threshold:   3
+    envs:
+      - key:   DATABASE_URL
+        scope: RUN_TIME
+        type:  SECRET
+      - key:   NEXTAUTH_SECRET
+        scope: RUN_TIME
+        type:  SECRET
+      - key:   NEXTAUTH_URL
+        scope: RUN_TIME
+        value: ${APP_URL}
+      - key:   GOOGLE_CLIENT_ID
+        scope: RUN_TIME
+        type:  SECRET
+      - key:   GOOGLE_CLIENT_SECRET
+        scope: RUN_TIME
+        type:  SECRET
+      - key:   NEO4J_URI
+        scope: RUN_TIME
+        type:  SECRET
+      - key:   NEO4J_USERNAME
+        scope: RUN_TIME
+        value: neo4j
+      - key:   NEO4J_PASSWORD
+        scope: RUN_TIME
+        type:  SECRET
+      - key:   AI_SERVICE_URL
+        scope: RUN_TIME
+        value: ${ai-service.PRIVATE_URL}
+      - key:   AI_SERVICE_API_KEY
+        scope: RUN_TIME
+        type:  SECRET
+      - key:   NEXT_PUBLIC_APP_URL
+        scope: BUILD_TIME
+        value: ${APP_URL}
+
+  - name: ai-service
+    github:
+      repo:           YOUR_GITHUB_ORG/family-tree
+      branch:         main
+      deploy_on_push: true
+    dockerfile_path:      ai-service/Dockerfile
+    dockerfile_context:   ai-service
+    instance_size_slug:   professional-xs
+    instance_count:       1
+    http_port:            8001
+    health_check:
+      http_path: /api/v1/health
+    envs:
+      - key:   AI_SERVICE_API_KEY
+        scope: RUN_TIME
+        type:  SECRET
+      - key:   ANTHROPIC_API_KEY
+        scope: RUN_TIME
+        type:  SECRET
+      - key:   OPENAI_API_KEY
+        scope: RUN_TIME
+        type:  SECRET
+      - key:   ENVIRONMENT
+        scope: RUN_TIME
+        value: production
+
+# ── Databases ─────────────────────────────────────────────────────────────────
+databases:
+  - name:       heritage-postgres
+    engine:     PG
+    version:    "16"
+    size:       db-s-1vcpu-1gb
+    num_nodes:  1
+    production: false   # Set to true for production with replicas
+
+# ── Managed Redis (via DO Add-on) ─────────────────────────────────────────────
+# Note: Neo4j requires a separate deployment (DO Marketplace or Droplet)
+# Recommended: AuraDB Free tier for Neo4j in development
+
+# ── Domains ──────────────────────────────────────────────────────────────────
+# domains:
+#   - domain: yourdomain.com
+#     type:   PRIMARY
+#   - domain: www.yourdomain.com
+#     type:   ALIAS
