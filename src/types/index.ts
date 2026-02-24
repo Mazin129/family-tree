@@ -95,6 +95,7 @@ export interface TreeMember {
   bio: string | null
   bioArabic: string | null
   occupation: string | null
+  occupationArabic: string | null
 
   privacyLevel: PrivacyLevel
   createdAt: Date
