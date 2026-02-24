@@ -9,7 +9,7 @@ import { AIInsightsPanel }   from '@/components/ai/AIInsightsPanel'
 import { toast }             from 'sonner'
 import {
   TreePine, Plus, Settings, Share2, Download,
-  ZoomIn, LayoutTree, Users, Sparkles, ChevronLeft,
+  ZoomIn, Network, Users, Sparkles, ChevronLeft,
   Info, ArrowLeft,
 } from 'lucide-react'
 import type { TreeNode, TreeMember, FamilyTree } from '@/types'
