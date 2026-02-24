@@ -7,13 +7,13 @@ import { getTreeForVisualization } from '@/lib/db/neo4j'
 // GET /api/family/trees/[treeId]
 export async function GET(
   req: NextRequest,
-  { params }: { params: { treeId: string } }
+  { params }: { params: Promise<{ treeId: string }> }
 ) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ success: false, error: 'غير مصرّح' }, { status: 401 })
 
   const userId = (session.user as any).id
-  const { treeId } = params
+  const { treeId } = await params
 
   try {
     const tree = await prisma.familyTree.findFirst({
@@ -67,20 +67,21 @@ export async function GET(
 // DELETE /api/family/trees/[treeId]
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { treeId: string } }
+  { params }: { params: Promise<{ treeId: string }> }
 ) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ success: false, error: 'غير مصرّح' }, { status: 401 })
 
   const userId = (session.user as any).id
+  const { treeId } = await params
 
   try {
     const tree = await prisma.familyTree.findFirst({
-      where: { id: params.treeId, ownerId: userId },
+      where: { id: treeId, ownerId: userId },
     })
     if (!tree) return NextResponse.json({ success: false, error: 'غير موجود' }, { status: 404 })
 
-    await prisma.familyTree.delete({ where: { id: params.treeId } })
+    await prisma.familyTree.delete({ where: { id: treeId } })
     return NextResponse.json({ success: true, message: 'تم حذف الشجرة' })
   } catch (err) {
     console.error(err)

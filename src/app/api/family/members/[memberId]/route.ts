@@ -25,13 +25,15 @@ const updateSchema = z.object({
 // GET /api/family/members/[memberId]
 export async function GET(
   req: NextRequest,
-  { params }: { params: { memberId: string } }
+  { params }: { params: Promise<{ memberId: string }> }
 ) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ success: false, error: 'غير مصرّح' }, { status: 401 })
 
+  const { memberId } = await params
+
   try {
-    const member = await prisma.treeMember.findUnique({ where: { id: params.memberId } })
+    const member = await prisma.treeMember.findUnique({ where: { id: memberId } })
     if (!member) return NextResponse.json({ success: false, error: 'غير موجود' }, { status: 404 })
     return NextResponse.json({ success: true, data: member })
   } catch {
@@ -42,12 +44,13 @@ export async function GET(
 // PATCH /api/family/members/[memberId]
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { memberId: string } }
+  { params }: { params: Promise<{ memberId: string }> }
 ) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ success: false, error: 'غير مصرّح' }, { status: 401 })
 
   const userId = (session.user as any).id
+  const { memberId } = await params
 
   try {
     const body = await req.json()
@@ -55,7 +58,7 @@ export async function PATCH(
 
     // Verify access
     const member = await prisma.treeMember.findUnique({
-      where: { id: params.memberId },
+      where: { id: memberId },
       include: { tree: true },
     })
     if (!member) return NextResponse.json({ success: false, error: 'غير موجود' }, { status: 404 })
@@ -64,7 +67,7 @@ export async function PATCH(
     }
 
     const updated = await prisma.treeMember.update({
-      where: { id: params.memberId },
+      where: { id: memberId },
       data:  data as any,
     })
 
@@ -91,16 +94,17 @@ export async function PATCH(
 // DELETE /api/family/members/[memberId]
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { memberId: string } }
+  { params }: { params: Promise<{ memberId: string }> }
 ) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ success: false, error: 'غير مصرّح' }, { status: 401 })
 
   const userId = (session.user as any).id
+  const { memberId } = await params
 
   try {
     const member = await prisma.treeMember.findUnique({
-      where:   { id: params.memberId },
+      where:   { id: memberId },
       include: { tree: true },
     })
     if (!member) return NextResponse.json({ success: false, error: 'غير موجود' }, { status: 404 })
@@ -108,7 +112,7 @@ export async function DELETE(
       return NextResponse.json({ success: false, error: 'غير مصرّح' }, { status: 403 })
     }
 
-    await prisma.treeMember.delete({ where: { id: params.memberId } })
+    await prisma.treeMember.delete({ where: { id: memberId } })
 
     // Remove from Neo4j (best effort)
     deletePerson(member.neo4jPersonId).catch(console.warn)
