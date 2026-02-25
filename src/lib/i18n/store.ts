@@ -1,34 +1,27 @@
 import { create } from 'zustand'
-import { persist, createJSONStorage } from 'zustand/middleware'
+import { persist } from 'zustand/middleware'
 
 export type Locale = 'ar' | 'en'
 
 interface LanguageState {
   locale: Locale
-  _hasHydrated: boolean
   setLocale: (locale: Locale) => void
   toggleLocale: () => void
-  setHasHydrated: (v: boolean) => void
 }
 
 export const useLanguageStore = create<LanguageState>()(
   persist(
     (set, get) => ({
       locale: 'ar',
-      _hasHydrated: false,
       setLocale: (locale) => set({ locale }),
       toggleLocale: () => set({ locale: get().locale === 'ar' ? 'en' : 'ar' }),
-      setHasHydrated: (v) => set({ _hasHydrated: v }),
     }),
     {
       name: 'sudanese-heritage-locale',
-      storage: createJSONStorage(() => localStorage),
-      // Only persist locale, not the internal hydration flag
-      partialize: (state) => ({ locale: state.locale }),
-      onRehydrateStorage: () => (state) => {
-        state?.setHasHydrated(true)
-      },
-      // Prevent SSR/client hydration mismatch: rehydrate manually after mount
+      // skipHydration prevents the store from reading localStorage on the
+      // initial render (which would differ from the server-rendered 'ar' default
+      // and cause a React hydration mismatch / "client-side exception").
+      // LanguageProvider calls persist.rehydrate() after mount instead.
       skipHydration: true,
     }
   )
