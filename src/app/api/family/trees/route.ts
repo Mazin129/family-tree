@@ -6,7 +6,7 @@ import { z }           from 'zod'
 import { v4 as uuid }  from 'uuid'
 
 const createTreeSchema = z.object({
-  name:         z.string().min(2),
+  name:         z.string().optional().nullable(),
   nameArabic:   z.string().optional(),
   description:  z.string().optional(),
   descriptionAr: z.string().optional(),
@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
     const tree = await prisma.familyTree.create({
       data: {
         ownerId:      userId,
-        name:         data.name,
+        name:         data.name || data.nameArabic || '',
         nameArabic:   data.nameArabic,
         description:  data.description,
         descriptionAr: data.descriptionAr,

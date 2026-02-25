@@ -11,7 +11,7 @@ import { SUDANESE_TRIBES, REGION_LABELS } from '@/types'
 import Link from 'next/link'
 
 const treeSchema = z.object({
-  name:          z.string().min(2, 'اسم الشجرة مطلوب'),
+  name:          z.string().optional().or(z.literal('')),
   nameArabic:    z.string().min(2, 'الاسم بالعربية مطلوب'),
   description:   z.string().optional(),
   descriptionAr: z.string().optional(),
@@ -87,7 +87,7 @@ export default function NewTreePage() {
             </div>
 
             <div>
-              <label className="label">اسم الشجرة بالإنجليزية *</label>
+              <label className="label">اسم الشجرة بالإنجليزية</label>
               <input
                 {...register('name')}
                 placeholder="Al-Nile Family Tree"
