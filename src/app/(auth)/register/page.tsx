@@ -9,33 +9,39 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { TreePine, User, Mail, Lock, Eye, EyeOff, Loader2, CheckCircle2 } from 'lucide-react'
 import { toast } from 'sonner'
-
-const registerSchema = z.object({
-  name:             z.string().min(2, 'الاسم قصير جداً — يجب أن يكون حرفين على الأقل'),
-  nameArabic:       z.string().min(2, 'الاسم بالعربية قصير جداً').optional().or(z.literal('')),
-  email:            z.string().email('البريد الإلكتروني غير صحيح'),
-  password:         z.string().min(8, 'كلمة المرور يجب أن تكون 8 أحرف على الأقل'),
-  confirmPassword:  z.string(),
-  consentGiven:     z.boolean().refine(v => v, 'يجب الموافقة على الشروط والسياسات'),
-}).refine(d => d.password === d.confirmPassword, {
-  message: 'كلمتا المرور غير متطابقتين',
-  path:    ['confirmPassword'],
-})
-
-type RegisterForm = z.infer<typeof registerSchema>
+import { useLanguage } from '@/lib/i18n/store'
+import { createT } from '@/lib/i18n/translations'
+import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher'
 
 export default function RegisterPage() {
   const router = useRouter()
-  const [showPass, setShowPass]         = useState(false)
+  const [showPass, setShowPass]           = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
+
+  const { locale, dir } = useLanguage()
+  const t = createT(locale)
+
+  const registerSchema = z.object({
+    name:            z.string().min(2, t('register_name_short')),
+    nameArabic:      z.string().min(2, t('register_arabic_name_short')).optional().or(z.literal('')),
+    email:           z.string().email(t('register_email_invalid')),
+    password:        z.string().min(8, t('register_password_min')),
+    confirmPassword: z.string(),
+    consentGiven:    z.boolean().refine(v => v, t('register_consent_required')),
+  }).refine(d => d.password === d.confirmPassword, {
+    message: t('register_passwords_mismatch'),
+    path:    ['confirmPassword'],
+  })
+
+  type RegisterForm = z.infer<typeof registerSchema>
 
   const { register, handleSubmit, watch, formState: { errors, isSubmitting } } = useForm<RegisterForm>({
     resolver: zodResolver(registerSchema),
     defaultValues: { consentGiven: false },
   })
 
-  const password = watch('password', '')
-  const passwordStrength = getPasswordStrength(password)
+  const password        = watch('password', '')
+  const passwordStrength = getPasswordStrength(password, t)
 
   async function onSubmit(data: RegisterForm) {
     try {
@@ -53,11 +59,10 @@ export default function RegisterPage() {
 
       const json = await res.json()
       if (!json.success) {
-        toast.error(json.error || 'حدث خطأ أثناء إنشاء الحساب')
+        toast.error(json.error || t('register_error'))
         return
       }
 
-      // Auto sign in
       const signInRes = await signIn('credentials', {
         email:    data.email,
         password: data.password,
@@ -65,20 +70,28 @@ export default function RegisterPage() {
       })
 
       if (signInRes?.ok) {
-        toast.success('تم إنشاء حسابك بنجاح! مرحباً بك 🎉')
+        toast.success(t('register_success'))
         router.push('/dashboard')
       } else {
-        toast.success('تم إنشاء الحساب. يرجى تسجيل الدخول.')
+        toast.success(t('register_success_redirect'))
         router.push('/login')
       }
     } catch {
-      toast.error('حدث خطأ غير متوقع. يرجى المحاولة لاحقاً.')
+      toast.error(t('register_unexpected_error'))
     }
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-sand-900 via-sand-800 to-khartoum-900 flex items-center justify-center p-4 py-10" dir="rtl">
+    <div
+      className="min-h-screen bg-gradient-to-br from-sand-900 via-sand-800 to-khartoum-900 flex items-center justify-center p-4 py-10"
+      dir={dir}
+    >
       <div className="absolute inset-0 pattern-overlay opacity-20" />
+
+      {/* Language switcher — top corner */}
+      <div className="absolute top-4 end-4">
+        <LanguageSwitcher variant="light" />
+      </div>
 
       <div className="relative w-full max-w-md">
         {/* Logo */}
@@ -86,8 +99,8 @@ export default function RegisterPage() {
           <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-heritage rounded-2xl shadow-heritage mb-4">
             <TreePine className="w-8 h-8 text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-white">انضم إلى مجتمعنا</h1>
-          <p className="text-sand-300 text-sm mt-1">ابدأ رحلتك في اكتشاف تراثك السوداني</p>
+          <h1 className="text-2xl font-bold text-white">{t('register_title')}</h1>
+          <p className="text-sand-300 text-sm mt-1">{t('register_subtitle')}</p>
         </div>
 
         <div className="card p-8">
@@ -106,52 +119,85 @@ export default function RegisterPage() {
                   <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
                 </svg>
             }
-            <span>التسجيل مع Google</span>
+            <span>{t('register_google')}</span>
           </button>
 
-          <div className="divider-heritage"><span>أو</span></div>
+          <div className="divider-heritage"><span>{t('or')}</span></div>
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             {/* Name */}
             <div>
-              <label className="label">الاسم الكامل (بالإنجليزية)</label>
+              <label className="label">{t('register_name')}</label>
               <div className="relative">
-                <User className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-khartoum-400" />
-                <input {...register('name')} placeholder="Ahmed Ibrahim" className="input pr-10 text-left" dir="ltr" />
+                <User
+                  className="absolute top-1/2 -translate-y-1/2 w-4 h-4 text-khartoum-400"
+                  style={{ insetInlineEnd: '0.75rem' }}
+                />
+                <input
+                  {...register('name')}
+                  placeholder="Ahmed Ibrahim"
+                  className="input text-left"
+                  dir="ltr"
+                  style={{ paddingInlineEnd: '2.5rem' }}
+                />
               </div>
               {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name.message}</p>}
             </div>
 
             {/* Arabic Name */}
             <div>
-              <label className="label">الاسم بالعربية (اختياري)</label>
-              <input {...register('nameArabic')} placeholder="أحمد إبراهيم" className="input text-right" dir="rtl" />
+              <label className="label">{t('register_name_arabic')}</label>
+              <input
+                {...register('nameArabic')}
+                placeholder="أحمد إبراهيم"
+                className="input text-right"
+                dir="rtl"
+              />
               {errors.nameArabic && <p className="text-red-500 text-xs mt-1">{errors.nameArabic.message}</p>}
             </div>
 
             {/* Email */}
             <div>
-              <label className="label">البريد الإلكتروني</label>
+              <label className="label">{t('register_email')}</label>
               <div className="relative">
-                <Mail className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-khartoum-400" />
-                <input {...register('email')} type="email" placeholder="email@example.com" className="input pr-10 text-left" dir="ltr" />
+                <Mail
+                  className="absolute top-1/2 -translate-y-1/2 w-4 h-4 text-khartoum-400"
+                  style={{ insetInlineEnd: '0.75rem' }}
+                />
+                <input
+                  {...register('email')}
+                  type="email"
+                  placeholder="email@example.com"
+                  className="input text-left"
+                  dir="ltr"
+                  style={{ paddingInlineEnd: '2.5rem' }}
+                />
               </div>
               {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email.message}</p>}
             </div>
 
             {/* Password */}
             <div>
-              <label className="label">كلمة المرور</label>
+              <label className="label">{t('register_password')}</label>
               <div className="relative">
-                <Lock className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-khartoum-400" />
+                <Lock
+                  className="absolute top-1/2 -translate-y-1/2 w-4 h-4 text-khartoum-400"
+                  style={{ insetInlineEnd: '0.75rem' }}
+                />
                 <input
                   {...register('password')}
                   type={showPass ? 'text' : 'password'}
-                  placeholder="8 أحرف على الأقل"
-                  className="input pr-10 pl-10"
+                  placeholder={t('register_password_placeholder')}
+                  className="input"
                   dir="ltr"
+                  style={{ paddingInlineEnd: '2.5rem', paddingInlineStart: '2.5rem' }}
                 />
-                <button type="button" onClick={() => setShowPass(!showPass)} className="absolute left-3 top-1/2 -translate-y-1/2 text-khartoum-400">
+                <button
+                  type="button"
+                  onClick={() => setShowPass(!showPass)}
+                  className="absolute top-1/2 -translate-y-1/2 text-khartoum-400"
+                  style={{ insetInlineStart: '0.75rem' }}
+                >
                   {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
@@ -159,7 +205,7 @@ export default function RegisterPage() {
               {password.length > 0 && (
                 <div className="mt-2">
                   <div className="flex gap-1">
-                    {[1,2,3,4].map(i => (
+                    {[1, 2, 3, 4].map(i => (
                       <div key={i} className={`h-1 flex-1 rounded-full transition-colors ${
                         i <= passwordStrength.score
                           ? passwordStrength.score <= 1 ? 'bg-red-400'
@@ -178,11 +224,11 @@ export default function RegisterPage() {
 
             {/* Confirm Password */}
             <div>
-              <label className="label">تأكيد كلمة المرور</label>
+              <label className="label">{t('register_confirm_password')}</label>
               <input
                 {...register('confirmPassword')}
                 type="password"
-                placeholder="أعد إدخال كلمة المرور"
+                placeholder={t('register_confirm_placeholder')}
                 className="input"
                 dir="ltr"
               />
@@ -198,25 +244,25 @@ export default function RegisterPage() {
                 className="mt-0.5 h-4 w-4 rounded border-khartoum-300 text-sand-500 focus:ring-sand-400"
               />
               <label htmlFor="consent" className="text-sm text-khartoum-600 cursor-pointer leading-relaxed">
-                أوافق على{' '}
-                <Link href="/terms"   className="text-sand-600 hover:underline">شروط الاستخدام</Link>
-                {' '}و{' '}
-                <Link href="/privacy" className="text-sand-600 hover:underline">سياسة الخصوصية</Link>
-                ، وأفهم كيفية استخدام بياناتي.
+                {t('register_consent')}{' '}
+                <Link href="/terms"   className="text-sand-600 hover:underline">{t('register_terms')}</Link>
+                {' '}{t('register_and')}{' '}
+                <Link href="/privacy" className="text-sand-600 hover:underline">{t('register_privacy')}</Link>
+                {t('register_consent_suffix')}
               </label>
             </div>
             {errors.consentGiven && <p className="text-red-500 text-xs">{errors.consentGiven.message}</p>}
 
             <button type="submit" disabled={isSubmitting || googleLoading} className="btn-primary w-full py-3 mt-2">
               {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle2 className="w-5 h-5" />}
-              إنشاء الحساب
+              {t('register_submit')}
             </button>
           </form>
 
           <p className="text-center text-khartoum-500 text-sm mt-6">
-            لديك حساب بالفعل؟{' '}
+            {t('register_has_account')}{' '}
             <Link href="/login" className="text-sand-600 hover:text-sand-700 font-medium">
-              سجّل دخولك
+              {t('register_login_link')}
             </Link>
           </p>
         </div>
@@ -225,14 +271,13 @@ export default function RegisterPage() {
   )
 }
 
-function getPasswordStrength(password: string): { score: number; label: string } {
+function getPasswordStrength(password: string, t: (k: string) => string): { score: number; label: string } {
   if (!password) return { score: 0, label: '' }
   let score = 0
-  if (password.length >= 8)               score++
-  if (/[A-Z]/.test(password))            score++
-  if (/[0-9]/.test(password))            score++
-  if (/[^A-Za-z0-9]/.test(password))     score++
-
-  const labels = ['', 'ضعيفة', 'مقبولة', 'جيدة', 'قوية']
+  if (password.length >= 8)           score++
+  if (/[A-Z]/.test(password))        score++
+  if (/[0-9]/.test(password))        score++
+  if (/[^A-Za-z0-9]/.test(password)) score++
+  const labels = ['', t('pw_weak'), t('pw_fair'), t('pw_good'), t('pw_strong')]
   return { score, label: labels[score] }
 }

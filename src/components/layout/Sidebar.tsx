@@ -3,65 +3,71 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
-  TreePine, Users, BookOpen, Globe, LayoutDashboard,
-  Settings, Shield, LogOut, ChevronLeft, Sparkles,
-  Mic, Image as ImageIcon,
+  TreePine, Users, Globe, LayoutDashboard,
+  Settings, Shield, LogOut, Sparkles,
 } from 'lucide-react'
 import { signOut } from 'next-auth/react'
 import { cn } from '@/lib/utils/cn'
+import { useLanguage } from '@/lib/i18n/store'
+import { createT } from '@/lib/i18n/translations'
+import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher'
 import type { User } from '@/types'
-
-const NAV_ITEMS = [
-  {
-    label: 'لوحة التحكم',
-    href:  '/dashboard',
-    icon:  LayoutDashboard,
-  },
-  {
-    label:    'شجرة العائلة',
-    href:     '/tree',
-    icon:     TreePine,
-    children: [
-      { label: 'شجراتي',        href: '/tree' },
-      { label: 'شجرة جديدة',    href: '/tree/new' },
-    ],
-  },
-  {
-    label: 'المجتمع',
-    href:  '/community',
-    icon:  Users,
-  },
-  {
-    label:    'التراث الثقافي',
-    href:     '/community/heritage',
-    icon:     Globe,
-    children: [
-      { label: 'مقتنيات التراث', href: '/community/heritage' },
-      { label: 'التاريخ الشفهي', href: '/community/oral-history' },
-    ],
-  },
-  {
-    label: 'ذكاء اصطناعي',
-    href:  '/ai-insights',
-    icon:  Sparkles,
-    badge: 'جديد',
-  },
-]
-
-const BOTTOM_ITEMS = [
-  { label: 'الإعدادات',  href: '/settings', icon: Settings  },
-  { label: 'الخصوصية',   href: '/privacy',  icon: Shield    },
-]
 
 interface SidebarProps {
   user: Partial<User>
 }
 
 export function Sidebar({ user }: SidebarProps) {
-  const pathname = usePathname()
+  const pathname      = usePathname()
+  const { locale, dir } = useLanguage()
+  const t             = createT(locale)
+
+  const NAV_ITEMS = [
+    {
+      label: t('nav_dashboard'),
+      href:  '/dashboard',
+      icon:  LayoutDashboard,
+    },
+    {
+      label:    t('nav_tree'),
+      href:     '/tree',
+      icon:     TreePine,
+      children: [
+        { label: t('nav_my_trees'), href: '/tree'     },
+        { label: t('nav_new_tree'), href: '/tree/new' },
+      ],
+    },
+    {
+      label: t('nav_community_menu'),
+      href:  '/community',
+      icon:  Users,
+    },
+    {
+      label:    t('nav_cultural'),
+      href:     '/community/heritage',
+      icon:     Globe,
+      children: [
+        { label: t('nav_heritage_items'), href: '/community/heritage'     },
+        { label: t('nav_oral_history'),   href: '/community/oral-history' },
+      ],
+    },
+    {
+      label: t('nav_ai'),
+      href:  '/ai-insights',
+      icon:  Sparkles,
+      badge: t('nav_ai_badge'),
+    },
+  ]
+
+  const BOTTOM_ITEMS = [
+    { label: t('nav_settings'), href: '/settings', icon: Settings },
+    { label: t('nav_privacy'),  href: '/privacy',  icon: Shield   },
+  ]
 
   return (
-    <aside className="hidden lg:flex w-64 flex-col bg-white border-l border-sand-200 h-screen sticky top-0 overflow-y-auto">
+    <aside className="hidden lg:flex w-64 flex-col bg-white border-sand-200 h-screen sticky top-0 overflow-y-auto"
+      style={{ borderInlineEndWidth: '1px', borderInlineEndStyle: 'solid' }}
+    >
       {/* Logo */}
       <div className="p-6 border-b border-sand-100">
         <Link href="/dashboard" className="flex items-center gap-2.5">
@@ -69,8 +75,8 @@ export function Sidebar({ user }: SidebarProps) {
             <TreePine className="w-5 h-5 text-white" />
           </div>
           <div>
-            <div className="font-bold text-khartoum-900 text-sm leading-tight">التراث السوداني</div>
-            <div className="text-xs text-khartoum-400 leading-tight">Sudanese Heritage</div>
+            <div className="font-bold text-khartoum-900 text-sm leading-tight">{t('brand_name')}</div>
+            <div className="text-xs text-khartoum-400 leading-tight">{t('brand_subtitle')}</div>
           </div>
         </Link>
       </div>
@@ -96,22 +102,30 @@ export function Sidebar({ user }: SidebarProps) {
         ))}
         <button
           onClick={() => signOut({ callbackUrl: '/login' })}
-          className="nav-link w-full text-right text-red-500 hover:bg-red-50 hover:text-red-600"
+          className="nav-link w-full text-red-500 hover:bg-red-50 hover:text-red-600"
+          style={{ textAlign: 'inherit' }}
         >
           <LogOut className="w-4 h-4" />
-          تسجيل الخروج
+          {t('nav_logout')}
         </button>
+      </div>
+
+      {/* Language switcher */}
+      <div className="px-4 pb-3">
+        <LanguageSwitcher className="w-full justify-center" />
       </div>
 
       {/* User card */}
       <div className="p-4 border-t border-sand-100">
         <div className="flex items-center gap-3 p-3 rounded-xl bg-sand-50">
           <div className="w-9 h-9 rounded-full bg-gradient-heritage flex items-center justify-center text-white font-semibold text-sm shrink-0">
-            {(user.name || user.nameArabic || 'U').charAt(0).toUpperCase()}
+            {(user.name || user.nameArabic || t('default_user')).charAt(0).toUpperCase()}
           </div>
           <div className="flex-1 min-w-0">
             <div className="text-sm font-medium text-khartoum-900 truncate">
-              {user.nameArabic || user.name || 'مستخدم'}
+              {locale === 'ar'
+                ? (user.nameArabic || user.name || t('default_user'))
+                : (user.name || user.nameArabic || t('default_user'))}
             </div>
             <div className="text-xs text-khartoum-400 truncate">{user.email}</div>
           </div>
@@ -125,7 +139,7 @@ function NavItem({
   item,
   pathname,
 }: {
-  item: (typeof NAV_ITEMS)[0]
+  item: { label: string; href: string; icon: React.ElementType; badge?: string; children?: { label: string; href: string }[] }
   pathname: string
 }) {
   const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
@@ -143,7 +157,7 @@ function NavItem({
         )}
       </Link>
       {item.children && isActive && (
-        <div className="mr-6 mt-1 space-y-1 border-r-2 border-sand-200 pr-3">
+        <div className="ms-6 mt-1 space-y-1 border-s-2 border-sand-200 ps-3">
           {item.children.map(child => (
             <Link
               key={child.href}
