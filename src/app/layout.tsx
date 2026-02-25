@@ -1,10 +1,7 @@
 import type { Metadata, Viewport } from 'next'
-import { Inter } from 'next/font/google'
 import { Toaster } from 'sonner'
 import './globals.css'
 import { Providers } from './providers'
-
-const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
 
 export const metadata: Metadata = {
   title: {
@@ -48,7 +45,7 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body className={`${inter.variable} font-arabic antialiased`}>
+      <body className="font-arabic antialiased">
         <Providers>
           {children}
           <Toaster

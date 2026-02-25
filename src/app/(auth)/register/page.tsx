@@ -10,7 +10,7 @@ import { z } from 'zod'
 import { TreePine, User, Mail, Lock, Eye, EyeOff, Loader2, CheckCircle2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useLanguage } from '@/lib/i18n/store'
-import { createT } from '@/lib/i18n/translations'
+import { createT, type TranslationKey } from '@/lib/i18n/translations'
 import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher'
 
 export default function RegisterPage() {
@@ -271,7 +271,7 @@ export default function RegisterPage() {
   )
 }
 
-function getPasswordStrength(password: string, t: (k: string) => string): { score: number; label: string } {
+function getPasswordStrength(password: string, t: (k: TranslationKey) => string): { score: number; label: string } {
   if (!password) return { score: 0, label: '' }
   let score = 0
   if (password.length >= 8)           score++
