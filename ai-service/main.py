@@ -35,6 +35,8 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
+        "https://sudandna.com",
+        "https://www.sudandna.com",
         os.getenv("NEXT_PUBLIC_APP_URL", "http://localhost:3000"),
         "http://localhost:3000",
     ],
