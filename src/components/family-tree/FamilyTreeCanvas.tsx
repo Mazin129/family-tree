@@ -2,94 +2,77 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import * as d3 from 'd3'
-import type { TreeNode, Gender } from '@/types'
-import { cn } from '@/lib/utils/cn'
+import type { TreeNode } from '@/types'
 
 interface FamilyTreeCanvasProps {
   data: TreeNode
   onNodeClick?: (node: TreeNode) => void
-  onNodeAdd?: (parentNode: TreeNode) => void
-  language?: 'ar' | 'en'
-  readOnly?: boolean
+  onNodeAdd?:   (parentNode: TreeNode) => void
+  language?:    'ar' | 'en'
+  readOnly?:    boolean
 }
 
-const NODE_WIDTH  = 160
-const NODE_HEIGHT = 90
-const H_GAP       = 40
-const V_GAP       = 80
+const NODE_W  = 190
+const NODE_H  = 100
+const H_GAP   = 48
+const V_GAP   = 90
 
 export function FamilyTreeCanvas({
   data,
   onNodeClick,
   onNodeAdd,
-  language = 'ar',
-  readOnly = false,
+  language  = 'ar',
+  readOnly  = false,
 }: FamilyTreeCanvasProps) {
   const svgRef       = useRef<SVGSVGElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const zoomRef      = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [tooltip, setTooltip]       = useState<{ x: number; y: number; node: TreeNode } | null>(null)
+  const [tooltip,    setTooltip]    = useState<{ x: number; y: number; node: TreeNode } | null>(null)
 
   const renderTree = useCallback(() => {
     if (!svgRef.current || !data) return
-
-    const svg = d3.select(svgRef.current)
+    const svg    = d3.select(svgRef.current)
     svg.selectAll('*').remove()
 
-    const width  = svgRef.current.clientWidth  || 900
-    const height = svgRef.current.clientHeight || 600
+    const W = svgRef.current.clientWidth  || 960
+    const H = svgRef.current.clientHeight || 640
 
-    // Main group with zoom/pan support
     const g = svg.append('g').attr('class', 'tree-root')
 
-    // Zoom behaviour
+    // Zoom
     const zoom = d3.zoom<SVGSVGElement, unknown>()
-      .scaleExtent([0.2, 3])
-      .on('zoom', (event) => {
-        g.attr('transform', event.transform.toString())
-      })
-
+      .scaleExtent([0.15, 3])
+      .on('zoom', e => g.attr('transform', e.transform.toString()))
+    zoomRef.current = zoom
     svg.call(zoom)
 
-    // Build D3 hierarchy
+    // Layout
     const root = d3.hierarchy<TreeNode>(data, d => d.children)
+    d3.tree<TreeNode>()
+      .nodeSize([NODE_W + H_GAP, NODE_H + V_GAP])
+      .separation((a, b) => (a.parent === b.parent ? 1.3 : 1.7))(root)
 
-    const treeLayout = d3.tree<TreeNode>()
-      .nodeSize([NODE_WIDTH + H_GAP, NODE_HEIGHT + V_GAP])
-      .separation((a, b) => (a.parent === b.parent ? 1.2 : 1.6))
-
-    treeLayout(root)
-
-    // Centre the tree initially
+    // Centre initially
     const nodes = root.descendants()
-    const xs = nodes.map(n => n.x!)
-    const ys = nodes.map(n => n.y!)
-    const minX = Math.min(...xs)
-    const maxX = Math.max(...xs)
-    const minY = Math.min(...ys)
+    const xs    = nodes.map(n => n.x!)
+    const tx    = (W / 2) - ((Math.min(...xs) + Math.max(...xs)) / 2)
+    const ty    = 70 - Math.min(...nodes.map(n => n.y!))
+    g.attr('transform', `translate(${tx},${ty})`)
+    svg.call(zoom.transform, d3.zoomIdentity.translate(tx, ty))
 
-    const initTranslateX = (width  / 2) - ((minX + maxX) / 2)
-    const initTranslateY = 60 - minY
-
-    g.attr('transform', `translate(${initTranslateX},${initTranslateY})`)
-    svg.call(zoom.transform, d3.zoomIdentity.translate(initTranslateX, initTranslateY))
-
-    // ── Links ─────────────────────────────────────────────────────────────
+    // ── Links ──────────────────────────────────────────────────────────
     g.selectAll('.link')
       .data(root.links())
-      .enter()
-      .append('path')
+      .enter().append('path')
       .attr('class', 'tree-link')
       .attr('d', d3.linkVertical<d3.HierarchyLink<TreeNode>, d3.HierarchyPointNode<TreeNode>>()
-        .x(d => d.x!)
-        .y(d => d.y!)
-      )
+        .x(d => d.x!).y(d => d.y!))
 
-    // ── Nodes ──────────────────────────────────────────────────────────────
-    const nodeGroup = g.selectAll('.node')
+    // ── Nodes ──────────────────────────────────────────────────────────
+    const nodeG = g.selectAll('.node')
       .data(root.descendants())
-      .enter()
-      .append('g')
+      .enter().append('g')
       .attr('class', 'node')
       .attr('transform', d => `translate(${d.x},${d.y})`)
       .style('cursor', 'pointer')
@@ -99,113 +82,104 @@ export function FamilyTreeCanvas({
         onNodeClick?.(d.data)
       })
       .on('mouseenter', (event, d) => {
-        const svgRect = svgRef.current!.getBoundingClientRect()
-        const transform = d3.zoomTransform(svgRef.current!)
-        const screenX = d.x! * transform.k + transform.x + svgRect.left
-        const screenY = d.y! * transform.k + transform.y + svgRect.top
-        setTooltip({ x: event.clientX - svgRect.left, y: event.clientY - svgRect.top, node: d.data })
+        const rect = svgRef.current!.getBoundingClientRect()
+        setTooltip({ x: event.clientX - rect.left, y: event.clientY - rect.top, node: d.data })
       })
       .on('mouseleave', () => setTooltip(null))
 
+    // Card shadow (fake)
+    nodeG.append('rect')
+      .attr('x', -NODE_W / 2 + 3).attr('y', -NODE_H / 2 + 4)
+      .attr('width', NODE_W).attr('height', NODE_H)
+      .attr('rx', 14).attr('ry', 14)
+      .attr('fill', 'rgba(0,0,0,0.06)')
+
     // Card background
-    nodeGroup.append('rect')
-      .attr('x', -NODE_WIDTH / 2)
-      .attr('y', -NODE_HEIGHT / 2)
-      .attr('width',  NODE_WIDTH)
-      .attr('height', NODE_HEIGHT)
-      .attr('rx', 12)
-      .attr('ry', 12)
-      .attr('fill', d => d.data.id === selectedId ? '#faefd8' : 'white')
+    nodeG.append('rect')
+      .attr('x', -NODE_W / 2).attr('y', -NODE_H / 2)
+      .attr('width', NODE_W).attr('height', NODE_H)
+      .attr('rx', 14).attr('ry', 14)
+      .attr('fill', d => d.data.id === selectedId ? '#fef3e2' : 'white')
       .attr('stroke', d => {
         if (d.data.id === selectedId) return '#d4922d'
-        return d.data.gender === 'MALE' ? '#bce1fd' : '#fba77733'
+        return d.data.gender === 'MALE' ? '#bfdbfe' : '#fed7aa'
       })
       .attr('stroke-width', d => d.data.id === selectedId ? 2.5 : 1.5)
-      .style('filter', 'drop-shadow(0 2px 8px rgba(0,0,0,0.08))')
 
-    // Gender indicator bar
-    nodeGroup.append('rect')
-      .attr('x', -NODE_WIDTH / 2)
-      .attr('y', -NODE_HEIGHT / 2)
-      .attr('width', 6)
-      .attr('height', NODE_HEIGHT)
-      .attr('rx', 12)
+    // Gender accent bar (left edge)
+    nodeG.append('rect')
+      .attr('x', -NODE_W / 2).attr('y', -NODE_H / 2)
+      .attr('width', 5).attr('height', NODE_H)
+      .attr('rx', 14).attr('ry', 14)
       .attr('fill', d => {
         if (!d.data.isAlive) return '#a1a1aa'
-        return d.data.gender === 'MALE' ? '#1a75e8' : '#f1933f'
+        return d.data.gender === 'MALE' ? '#3b82f6' : '#f97316'
       })
 
     // Avatar circle
-    nodeGroup.append('circle')
-      .attr('cx', -NODE_WIDTH / 2 + 30)
-      .attr('cy', 0)
-      .attr('r', 22)
-      .attr('fill', d => d.data.gender === 'MALE' ? '#dbeffe' : '#fad7ac')
-      .attr('stroke', d => d.data.gender === 'MALE' ? '#8ecdfc' : '#f6ba77')
+    nodeG.append('circle')
+      .attr('cx', -NODE_W / 2 + 32).attr('cy', 0).attr('r', 24)
+      .attr('fill', d => d.data.gender === 'MALE' ? '#dbeafe' : '#ffedd5')
+      .attr('stroke', d => d.data.gender === 'MALE' ? '#93c5fd' : '#fdba74')
       .attr('stroke-width', 1.5)
 
     // Avatar initial
-    nodeGroup.append('text')
-      .attr('x', -NODE_WIDTH / 2 + 30)
-      .attr('y', 5)
+    nodeG.append('text')
+      .attr('x', -NODE_W / 2 + 32).attr('y', 6)
       .attr('text-anchor', 'middle')
-      .attr('font-size', 16)
-      .attr('font-weight', '600')
-      .attr('fill', d => d.data.gender === 'MALE' ? '#155ed5' : '#b87424')
-      .text(d => {
-        const name = language === 'ar' ? d.data.nameArabic || d.data.name : d.data.name
-        return name?.charAt(0)?.toUpperCase() || '?'
-      })
-
-    // Name text
-    nodeGroup.append('text')
-      .attr('x', -NODE_WIDTH / 2 + 62)
-      .attr('y', -10)
-      .attr('font-size', 12)
-      .attr('font-weight', '600')
-      .attr('fill', '#18181b')
+      .attr('font-size', 18).attr('font-weight', '700')
       .attr('font-family', "'Cairo', sans-serif")
+      .attr('fill', d => d.data.gender === 'MALE' ? '#1d4ed8' : '#c2410c')
       .text(d => {
         const name = language === 'ar' ? d.data.nameArabic || d.data.name : d.data.name
-        return truncate(name || 'مجهول', 14)
+        return name?.charAt(0)?.toUpperCase() || '؟'
       })
 
-    // Birth/Death year
-    nodeGroup.append('text')
-      .attr('x', -NODE_WIDTH / 2 + 62)
-      .attr('y', 8)
-      .attr('font-size', 10)
+    // Name
+    nodeG.append('text')
+      .attr('x', -NODE_W / 2 + 68).attr('y', -14)
+      .attr('font-size', 12.5).attr('font-weight', '700')
+      .attr('font-family', "'Cairo', sans-serif")
+      .attr('fill', '#18181b')
+      .text(d => {
+        const name = language === 'ar' ? d.data.nameArabic || d.data.name : d.data.name
+        return trunc(name || 'مجهول', 15)
+      })
+
+    // Sub-info line
+    nodeG.append('text')
+      .attr('x', -NODE_W / 2 + 68).attr('y', 4)
+      .attr('font-size', 10.5)
+      .attr('font-family', "'Cairo', sans-serif")
       .attr('fill', '#71717a')
       .text(d => {
-        const parts = []
-        if (d.data.birthYear) parts.push(d.data.birthYear)
-        if (d.data.deathYear) parts.push(d.data.deathYear)
+        const parts: string[] = []
+        if (d.data.birthYear) parts.push(String(d.data.birthYear))
+        if (d.data.deathYear) parts.push(String(d.data.deathYear))
         return parts.join(' — ')
       })
 
     // Tribe badge
-    nodeGroup.filter(d => !!d.data.tribe)
+    nodeG.filter(d => !!d.data.tribe)
       .append('text')
-      .attr('x', -NODE_WIDTH / 2 + 62)
-      .attr('y', 24)
-      .attr('font-size', 9)
-      .attr('fill', '#8f5420')
-      .text(d => truncate(d.data.tribe || '', 16))
+      .attr('x', -NODE_W / 2 + 68).attr('y', 20)
+      .attr('font-size', 9.5)
+      .attr('font-family', "'Cairo', sans-serif")
+      .attr('fill', '#92400e')
+      .text(d => trunc(d.data.tribe || '', 18))
 
-    // Deceased marker
-    nodeGroup.filter(d => !d.data.isAlive)
+    // Deceased cross marker
+    nodeG.filter(d => !d.data.isAlive)
       .append('text')
-      .attr('x', NODE_WIDTH / 2 - 10)
-      .attr('y', -NODE_HEIGHT / 2 + 14)
-      .attr('font-size', 10)
-      .attr('fill', '#71717a')
+      .attr('x', NODE_W / 2 - 12).attr('y', -NODE_H / 2 + 16)
+      .attr('font-size', 11).attr('fill', '#a1a1aa')
       .text('†')
 
-    // Add child button (if not read-only)
+    // Add-relative button (hover)
     if (!readOnly) {
-      const addBtn = nodeGroup.append('g')
+      const addBtn = nodeG.append('g')
         .attr('class', 'add-btn')
-        .attr('transform', `translate(0, ${NODE_HEIGHT / 2 + 12})`)
+        .attr('transform', `translate(0,${NODE_H / 2 + 14})`)
         .style('opacity', 0)
         .on('click', (event, d) => {
           event.stopPropagation()
@@ -213,132 +187,103 @@ export function FamilyTreeCanvas({
         })
 
       addBtn.append('circle')
-        .attr('r', 10)
+        .attr('r', 11)
         .attr('fill', '#d4922d')
         .attr('stroke', 'white')
-        .attr('stroke-width', 2)
+        .attr('stroke-width', 2.5)
 
       addBtn.append('text')
-        .attr('text-anchor', 'middle')
-        .attr('y', 5)
-        .attr('font-size', 14)
-        .attr('fill', 'white')
+        .attr('text-anchor', 'middle').attr('y', 5.5)
+        .attr('font-size', 16).attr('fill', 'white').attr('font-weight', '700')
         .text('+')
 
-      nodeGroup
-        .on('mouseenter.btn', function() {
-          d3.select(this).select('.add-btn').style('opacity', 1)
-        })
-        .on('mouseleave.btn', function() {
-          d3.select(this).select('.add-btn').style('opacity', 0)
-        })
+      nodeG
+        .on('mouseenter.btn', function() { d3.select(this).select('.add-btn').style('opacity', 1) })
+        .on('mouseleave.btn', function() { d3.select(this).select('.add-btn').style('opacity', 0) })
     }
 
-    // Click background to deselect
-    svg.on('click', () => {
-      setSelectedId(null)
-      setTooltip(null)
-    })
+    svg.on('click', () => { setSelectedId(null); setTooltip(null) })
   }, [data, selectedId, language, readOnly, onNodeClick, onNodeAdd])
 
-  useEffect(() => {
-    renderTree()
-  }, [renderTree])
+  useEffect(() => { renderTree() }, [renderTree])
 
-  // Re-render on resize
   useEffect(() => {
     const ro = new ResizeObserver(() => renderTree())
     if (containerRef.current) ro.observe(containerRef.current)
     return () => ro.disconnect()
   }, [renderTree])
 
+  function zoomBy(k: number) {
+    if (!svgRef.current || !zoomRef.current) return
+    d3.select(svgRef.current).transition().duration(250)
+      .call(zoomRef.current.scaleBy, k)
+  }
+
+  function resetZoom() {
+    if (!svgRef.current || !zoomRef.current) return
+    d3.select(svgRef.current).transition().duration(350)
+      .call(zoomRef.current.transform, d3.zoomIdentity)
+  }
+
   return (
-    <div ref={containerRef} className="relative w-full h-full bg-gradient-desert rounded-2xl overflow-hidden">
-      <svg
-        ref={svgRef}
-        className="w-full h-full"
-        style={{ minHeight: 500 }}
-      />
+    <div ref={containerRef} className="relative w-full h-full overflow-hidden" style={{
+      background: 'radial-gradient(circle at 1px 1px, #e8dfc8 1px, transparent 0)',
+      backgroundSize: '28px 28px',
+      backgroundColor: '#f7f1e3',
+    }}>
+      <svg ref={svgRef} className="w-full h-full" style={{ minHeight: 500 }} />
 
       {/* Tooltip */}
       {tooltip && (
         <div
-          className="absolute z-10 bg-white rounded-xl shadow-card border border-sand-200 p-3 pointer-events-none animate-fade-in"
-          style={{ left: tooltip.x + 10, top: tooltip.y + 10, maxWidth: 220 }}
+          className="absolute z-20 pointer-events-none bg-white rounded-2xl shadow-xl border border-sand-200 p-4 min-w-[180px] animate-fade-in"
+          style={{ left: tooltip.x + 14, top: tooltip.y + 14, maxWidth: 230 }}
         >
-          <div className="font-semibold text-khartoum-900 text-sm">
+          <div className="font-bold text-khartoum-900 text-sm leading-snug">
             {language === 'ar' ? tooltip.node.nameArabic || tooltip.node.name : tooltip.node.name}
           </div>
           {tooltip.node.tribe && (
-            <div className="text-xs text-khartoum-500 mt-0.5">{tooltip.node.tribe}</div>
+            <div className="text-xs text-sand-700 font-medium mt-1">قبيلة {tooltip.node.tribe}</div>
           )}
           {(tooltip.node.birthYear || tooltip.node.deathYear) && (
-            <div className="text-xs text-khartoum-400 mt-0.5">
-              {tooltip.node.birthYear} {tooltip.node.deathYear ? `— ${tooltip.node.deathYear}` : ''}
+            <div className="text-xs text-khartoum-400 mt-1">
+              {tooltip.node.birthYear}{tooltip.node.deathYear ? ` — ${tooltip.node.deathYear}` : ''}
             </div>
           )}
           {!tooltip.node.isAlive && (
-            <div className="text-xs text-khartoum-400 mt-0.5">رحل إلى رحمة الله</div>
+            <div className="text-xs text-khartoum-400 mt-1 flex items-center gap-1">
+              <span>†</span> رحل إلى رحمة الله
+            </div>
           )}
         </div>
       )}
 
-      {/* Controls */}
-      <div className="absolute bottom-4 left-4 flex flex-col gap-2">
-        <ZoomButton
-          label="+"
-          onClick={() => {
-            if (!svgRef.current) return
-            const svg = d3.select(svgRef.current)
-            svg.transition().call(
-              d3.zoom<SVGSVGElement, unknown>().scaleBy as any,
-              1.3
-            )
-          }}
-        />
-        <ZoomButton
-          label="−"
-          onClick={() => {
-            if (!svgRef.current) return
-            const svg = d3.select(svgRef.current)
-            svg.transition().call(
-              d3.zoom<SVGSVGElement, unknown>().scaleBy as any,
-              0.77
-            )
-          }}
-        />
+      {/* Zoom controls */}
+      <div className="absolute bottom-5 left-5 flex flex-col gap-1.5">
+        <button onClick={() => zoomBy(1.35)}  className="zoom-btn">＋</button>
+        <button onClick={() => zoomBy(0.74)}  className="zoom-btn">－</button>
+        <button onClick={resetZoom}            className="zoom-btn text-xs font-bold">⌂</button>
       </div>
 
       {/* Legend */}
-      <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-sm rounded-xl px-3 py-2 text-xs space-y-1 border border-sand-100">
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-sm bg-nile-400" />
-          <span className="text-khartoum-600">ذكر</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-sm bg-sahara-400" />
-          <span className="text-khartoum-600">أنثى</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-sm bg-khartoum-300" />
-          <span className="text-khartoum-600">متوفى</span>
-        </div>
+      <div className="absolute top-4 right-4 bg-white/95 backdrop-blur-sm rounded-2xl px-4 py-3 border border-sand-100 shadow-sm space-y-1.5">
+        <LegendDot color="#3b82f6" label="ذكر" />
+        <LegendDot color="#f97316" label="أنثى" />
+        <LegendDot color="#a1a1aa" label="متوفى" />
       </div>
     </div>
   )
 }
 
-function ZoomButton({ label, onClick }: { label: string; onClick: () => void }) {
+function LegendDot({ color, label }: { color: string; label: string }) {
   return (
-    <button
-      onClick={onClick}
-      className="w-8 h-8 bg-white rounded-lg shadow-sm border border-sand-200 flex items-center justify-center text-khartoum-600 hover:bg-sand-50 font-bold text-lg"
-    >
-      {label}
-    </button>
+    <div className="flex items-center gap-2" dir="rtl">
+      <div className="w-3 h-3 rounded-full shrink-0" style={{ background: color }} />
+      <span className="text-xs text-khartoum-600">{label}</span>
+    </div>
   )
 }
 
-function truncate(str: string, maxLen: number): string {
-  return str.length > maxLen ? str.slice(0, maxLen - 1) + '…' : str
+function trunc(str: string, max: number) {
+  return str.length > max ? str.slice(0, max - 1) + '…' : str
 }
