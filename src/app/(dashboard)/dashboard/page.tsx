@@ -39,7 +39,13 @@ export default async function DashboardPage() {
           مرحباً، {userName} 👋
         </h1>
         <p className="text-khartoum-500 mt-1">
-          {new Intl.DateTimeFormat('ar-SD', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }).format(new Date())}
+          {(() => {
+            try {
+              return new Intl.DateTimeFormat('ar', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }).format(new Date())
+            } catch {
+              return new Date().toLocaleDateString()
+            }
+          })()}
         </p>
       </div>
 

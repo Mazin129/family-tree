@@ -4,11 +4,16 @@ import { useEffect } from 'react'
 import { useLanguageStore } from '@/lib/i18n/store'
 
 /**
- * Syncs the Zustand language store to the <html> element's lang and dir attributes.
- * Must be rendered inside Providers (client boundary).
+ * Rehydrates the Zustand persist store after mount (skipHydration=true prevents
+ * SSR/client mismatch), then syncs locale to the <html> element's lang + dir.
  */
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const locale = useLanguageStore(s => s.locale)
+
+  useEffect(() => {
+    // Trigger localStorage rehydration now that we're on the client
+    useLanguageStore.persist.rehydrate()
+  }, [])
 
   useEffect(() => {
     const html = document.documentElement
