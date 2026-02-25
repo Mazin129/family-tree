@@ -8,7 +8,7 @@ import { createPerson, createRelationship } from '@/lib/db/neo4j'
 
 const addMemberSchema = z.object({
   treeId:           z.string(),
-  fullName:         z.string().min(2),
+  fullName:         z.string().optional().nullable(),
   fullNameArabic:   z.string().optional().nullable(),
   fatherName:       z.string().optional().nullable(),
   grandfatherName:  z.string().optional().nullable(),
@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
       data: {
         treeId:         data.treeId,
         neo4jPersonId,
-        fullName:       data.fullName,
+        fullName:       data.fullName || data.fullNameArabic || '',
         fullNameArabic: data.fullNameArabic,
         fatherName:     data.fatherName,
         grandfatherName: data.grandfatherName,
@@ -103,7 +103,7 @@ export async function POST(req: NextRequest) {
     // Create in Neo4j graph (non-blocking - best effort)
     createPerson({
       postgresId:     member.id,
-      fullName:       data.fullName,
+      fullName:       data.fullName || data.fullNameArabic || '',
       fullNameArabic: data.fullNameArabic || null,
       gender:         data.gender as any,
       birthYear:      data.birthYear || null,

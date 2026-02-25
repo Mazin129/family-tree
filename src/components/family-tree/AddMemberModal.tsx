@@ -11,7 +11,7 @@ import { SUDANESE_TRIBES, REGION_LABELS } from '@/types'
 import { cn } from '@/lib/utils/cn'
 
 const memberSchema = z.object({
-  fullName:         z.string().min(2, 'الاسم مطلوب'),
+  fullName:         z.string().optional().or(z.literal('')),
   fullNameArabic:   z.string().optional().or(z.literal('')),
   fatherName:       z.string().optional().or(z.literal('')),
   grandfatherName:  z.string().optional().or(z.literal('')),
@@ -79,6 +79,7 @@ export function AddMemberModal({ treeId, relativeOf, onSuccess, onClose }: AddMe
         treeId,
         relativeOfId:     relativeOf?.id,
         relationshipType: data.relationshipType,
+        fullName:         data.fullName || null,
         birthYear:        data.birthYear || null,
         deathYear:        data.deathYear || null,
         fullNameArabic:   data.fullNameArabic || null,
@@ -158,7 +159,7 @@ export function AddMemberModal({ treeId, relativeOf, onSuccess, onClose }: AddMe
             <div className="grid md:grid-cols-2 gap-5">
               {/* Full name EN */}
               <div>
-                <label className="label">الاسم الكامل (بالإنجليزية) *</label>
+                <label className="label">الاسم الكامل (بالإنجليزية)</label>
                 <input {...register('fullName')} placeholder="Ahmed Ibrahim Ali" className="input text-left" dir="ltr" />
                 {errors.fullName && <p className="text-red-500 text-xs mt-1">{errors.fullName.message}</p>}
               </div>
