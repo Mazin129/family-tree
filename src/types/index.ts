@@ -285,12 +285,12 @@ export interface ApiResponse<T = unknown> {
 // ─────────────────────────────────────────────
 
 export const SUDANESE_TRIBES = [
-  "Ja'alin", "Shaigiyya", "Danagla", "Rubatab", "Manasir", "Mirifab",
-  "Birted", "Husaynat", "Beja", "Bisharin", "Ababda", "Hadendoa",
-  "Batahin", "Shukriyya", "Butana", "Kenana", "Hamaj", "Ingessana",
-  "Fur", "Masalit", "Zaghawa", "Tama", "Meidob", "Berti",
-  "Nuba", "Dinka", "Nuer", "Shilluk", "Bari", "Azande",
-  "Rashaida", "Kawahla", "Hawawir", "Kababish",
+  "الجعليين", "الشايقية", "الدناقلة", "الربطاب", "المناصير", "المريفاب",
+  "البرتد", "الحسينات", "البجا", "البشارية", "العبابدة", "الهدندوة",
+  "البطاحين", "الشكرية", "البطانة", "الكنانة", "الهماج", "الإنقسنا",
+  "الفور", "المساليت", "الزغاوة", "التامة", "الميدوب", "البرتي",
+  "النوبة", "الدينكا", "النوير", "الشلك", "الباري", "الأزاندي",
+  "الرشايدة", "الكواهلة", "الحواوير", "الكبابيش",
 ] as const
 
 export const REGION_LABELS: Record<SudaneseRegion, { en: string; ar: string }> = {
