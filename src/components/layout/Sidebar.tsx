@@ -115,6 +115,11 @@ export function Sidebar({ user }: SidebarProps) {
         <LanguageSwitcher className="w-full justify-center" />
       </div>
 
+      {/* Version */}
+      <div className="px-4 pb-2 text-center">
+        <span className="text-xs text-khartoum-300">v{process.env.NEXT_PUBLIC_APP_VERSION}</span>
+      </div>
+
       {/* User card */}
       <div className="p-4 border-t border-sand-100">
         <div className="flex items-center gap-3 p-3 rounded-xl bg-sand-50">

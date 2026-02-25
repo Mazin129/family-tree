@@ -1,5 +1,10 @@
 /** @type {import('next').NextConfig} */
+const { version } = require('./package.json')
+
 const nextConfig = {
+  env: {
+    NEXT_PUBLIC_APP_VERSION: version,
+  },
   output: 'standalone',
   experimental: {
     serverComponentsExternalPackages: ['neo4j-driver'],
