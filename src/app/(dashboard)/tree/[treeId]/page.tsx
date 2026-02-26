@@ -4,12 +4,13 @@ import { useEffect, useState, useCallback } from 'react'
 import { useParams } from 'next/navigation'
 import { FamilyTreeCanvas }  from '@/components/family-tree/FamilyTreeCanvas'
 import { MemberCard }        from '@/components/family-tree/MemberCard'
-import { AddMemberModal }    from '@/components/family-tree/AddMemberModal'
+import { AddMemberModal }     from '@/components/family-tree/AddMemberModal'
+import { BulkAddMembersModal } from '@/components/family-tree/BulkAddMembersModal'
 import { AIInsightsPanel }   from '@/components/ai/AIInsightsPanel'
 import { toast }             from 'sonner'
 import {
   TreePine, Plus, Settings, Share2,
-  Users, Sparkles, ChevronLeft, X, UserCircle2,
+  Users, Sparkles, ChevronLeft, X, UserCircle2, UsersRound,
 } from 'lucide-react'
 import type { TreeNode, TreeMember, FamilyTree } from '@/types'
 import Link from 'next/link'
@@ -25,6 +26,7 @@ export default function TreeViewPage() {
   const [members,        setMembers]       = useState<TreeMember[]>([])
   const [selectedMember, setSelectedMember] = useState<TreeMember | null>(null)
   const [showAddModal,   setShowAddModal]  = useState(false)
+  const [showBulkModal,  setShowBulkModal] = useState(false)
   const [addRelativeTo,  setAddRelativeTo] = useState<TreeMember | null>(null)
   const [activeTab,      setActiveTab]     = useState<Tab>('tree')
   const [loading,        setLoading]       = useState(true)
@@ -118,6 +120,14 @@ export default function TreeViewPage() {
         {/* Actions */}
         <div className="shrink-0 flex items-center gap-2">
           <button
+            onClick={() => { setAddRelativeTo(null); setShowBulkModal(true) }}
+            className="btn-secondary py-2 px-3 sm:px-4 text-xs sm:text-sm gap-1.5"
+            title="إضافة متعددة"
+          >
+            <UsersRound className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">إضافة متعددة</span>
+          </button>
+          <button
             onClick={() => { setAddRelativeTo(null); setShowAddModal(true) }}
             className="btn-primary py-2 px-3 sm:px-4 text-xs sm:text-sm gap-1.5"
           >
@@ -192,7 +202,7 @@ export default function TreeViewPage() {
                       onAddRelative={(member) => { setAddRelativeTo(member); setShowAddModal(true) }}
                     />
                   ))}
-                  <AddMemberTile onAdd={() => setShowAddModal(true)} />
+                  <AddMemberTile onAdd={() => setShowAddModal(true)} onBulkAdd={() => setShowBulkModal(true)} />
                 </div>
               )}
             </div>
@@ -243,6 +253,15 @@ export default function TreeViewPage() {
           onClose={() => { setShowAddModal(false); setAddRelativeTo(null) }}
         />
       )}
+
+      {showBulkModal && (
+        <BulkAddMembersModal
+          treeId={treeId}
+          relativeOf={addRelativeTo || undefined}
+          onSuccess={() => { fetchTree(); setAddRelativeTo(null) }}
+          onClose={() => { setShowBulkModal(false); setAddRelativeTo(null) }}
+        />
+      )}
     </div>
   )
 }
@@ -288,18 +307,34 @@ function EmptyMembersState({ onAdd }: { onAdd: () => void }) {
   )
 }
 
-function AddMemberTile({ onAdd }: { onAdd: () => void }) {
+function AddMemberTile({ onAdd, onBulkAdd }: { onAdd: () => void; onBulkAdd: () => void }) {
   return (
-    <button
-      onClick={onAdd}
-      className="group rounded-2xl border-2 border-dashed border-sand-200 hover:border-sand-400 bg-white/60 hover:bg-white p-6 flex flex-col items-center justify-center gap-3 min-h-[200px] transition-all"
-    >
-      <div className="w-12 h-12 rounded-2xl bg-sand-100 group-hover:bg-sand-200 flex items-center justify-center transition-colors">
-        <Plus className="w-6 h-6 text-sand-400 group-hover:text-sand-600 transition-colors" />
-      </div>
-      <span className="text-sm text-khartoum-400 group-hover:text-khartoum-600 font-medium transition-colors">
-        إضافة فرد
-      </span>
-    </button>
+    <div className="rounded-2xl border-2 border-dashed border-sand-200 bg-white/60 p-4 flex flex-col gap-3 min-h-[200px] justify-center">
+      <button
+        onClick={onAdd}
+        className="group flex items-center gap-3 p-3 rounded-xl hover:bg-sand-100 transition-colors"
+      >
+        <div className="w-9 h-9 rounded-xl bg-sand-100 group-hover:bg-sand-200 flex items-center justify-center transition-colors shrink-0">
+          <Plus className="w-5 h-5 text-sand-400 group-hover:text-sand-600 transition-colors" />
+        </div>
+        <div className="text-right">
+          <p className="text-sm font-medium text-khartoum-600 group-hover:text-khartoum-800 transition-colors">إضافة فرد</p>
+          <p className="text-xs text-khartoum-400">نموذج تفصيلي</p>
+        </div>
+      </button>
+      <div className="border-t border-sand-200" />
+      <button
+        onClick={onBulkAdd}
+        className="group flex items-center gap-3 p-3 rounded-xl hover:bg-sand-100 transition-colors"
+      >
+        <div className="w-9 h-9 rounded-xl bg-sand-100 group-hover:bg-sand-200 flex items-center justify-center transition-colors shrink-0">
+          <UsersRound className="w-5 h-5 text-sand-400 group-hover:text-sand-600 transition-colors" />
+        </div>
+        <div className="text-right">
+          <p className="text-sm font-medium text-khartoum-600 group-hover:text-khartoum-800 transition-colors">إضافة متعددة</p>
+          <p className="text-xs text-khartoum-400">حتى ٢٠ فرداً دفعةً واحدة</p>
+        </div>
+      </button>
+    </div>
   )
 }
