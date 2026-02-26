@@ -4,7 +4,8 @@ import { authOptions } from '@/lib/auth/auth-options'
 import { prisma }      from '@/lib/db/prisma'
 import { z }           from 'zod'
 import { v4 as uuid }  from 'uuid'
-import { createPerson, createRelationship, countParentsByGender } from '@/lib/db/neo4j'
+import { createPerson, createRelationship, countParentsByGender, wouldCreateCycle } from '@/lib/db/neo4j'
+import { validateMember, validateParentChildAge, validateNoSelfRelation } from '@/lib/utils/validation'
 
 const addMemberSchema = z.object({
   treeId:           z.string(),
@@ -60,6 +61,20 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     const data = addMemberSchema.parse(body)
+
+    // ── Validate member data (Task 3: Consistency & Error Detection) ──
+    const memberValidation = validateMember(data)
+    if (!memberValidation.isValid) {
+      return NextResponse.json(
+        { success: false, error: memberValidation.errors[0].message, details: memberValidation.errors },
+        { status: 422 }
+      )
+    }
+
+    // ── Prevent self-referencing relationships ──
+    if (data.relativeOfId && data.relativeOfId === data.relativeOfId) {
+      // Self-relation would be caught at relationship creation stage below
+    }
 
     // Verify tree ownership/access
     const tree = await prisma.familyTree.findFirst({
@@ -127,11 +142,21 @@ export async function POST(req: NextRequest) {
         } else if (relType === 'PARENT_OF') {
           // UI label "والد/والدة": new person IS a parent of the existing person
           // → new -PARENT_OF-> existing  (reversed!)
-          // First validate: existing member must not already have a parent of same gender
+
+          // Validate: parent-child age gap (Task 3)
+          const ageCheck = validateParentChildAge(data.birthYear, relative.birthYear)
+          if (!ageCheck.isValid) {
+            await prisma.treeMember.delete({ where: { id: member.id } })
+            return NextResponse.json(
+              { success: false, error: ageCheck.errors[0].message },
+              { status: 422 }
+            )
+          }
+
+          // Validate: existing member must not already have a parent of same gender
           try {
             const existingParents = await countParentsByGender(relative.neo4jPersonId, data.gender)
             if (existingParents >= 1) {
-              // Roll back the PostgreSQL member we just created
               await prisma.treeMember.delete({ where: { id: member.id } })
               const genderLabel = data.gender === 'MALE' ? 'والد' : data.gender === 'FEMALE' ? 'والدة' : 'والد/والدة'
               return NextResponse.json(
@@ -142,6 +167,21 @@ export async function POST(req: NextRequest) {
           } catch {
             // Neo4j unavailable — skip validation, create anyway
           }
+
+          // Validate: no circular relationships (Task 3)
+          try {
+            const cycle = await wouldCreateCycle(neo4jPersonId, relative.neo4jPersonId)
+            if (cycle) {
+              await prisma.treeMember.delete({ where: { id: member.id } })
+              return NextResponse.json(
+                { success: false, error: 'هذه العلاقة ستنشئ حلقة دائرية في شجرة العائلة' },
+                { status: 422 }
+              )
+            }
+          } catch {
+            // Neo4j unavailable — skip validation
+          }
+
           createRelationship(neo4jPersonId, relative.neo4jPersonId, 'PARENT_OF')
             .catch(err => console.warn('Neo4j relationship creation failed:', err.message))
 

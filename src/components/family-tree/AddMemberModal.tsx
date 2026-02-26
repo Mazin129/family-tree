@@ -9,6 +9,8 @@ import { toast } from 'sonner'
 import type { TreeMember, RelationshipType, SudaneseRegion } from '@/types'
 import { SUDANESE_TRIBES, REGION_LABELS } from '@/types'
 import { cn } from '@/lib/utils/cn'
+import { extractParentsFromLineage } from '@/lib/utils/arabic'
+import { validateTimeline, validateRequiredName } from '@/lib/utils/validation'
 
 const memberSchema = z.object({
   fullName:         z.string().optional().or(z.literal('')),
@@ -31,7 +33,22 @@ const memberSchema = z.object({
     'PARENT_OF', 'CHILD_OF', 'SPOUSE_OF', 'SIBLING_OF',
     'HALF_SIBLING_OF', 'ADOPTED_CHILD_OF', 'EXTENDED_KIN',
   ]).optional(),
-})
+}).refine(
+  data => !!(data.fullName?.trim() || data.fullNameArabic?.trim()),
+  { message: 'يجب إدخال الاسم بالعربية أو بالإنجليزية على الأقل', path: ['fullName'] }
+).refine(
+  data => {
+    if (data.birthYear && data.deathYear && data.deathYear < data.birthYear) return false
+    return true
+  },
+  { message: 'سنة الوفاة قبل سنة الميلاد', path: ['deathYear'] }
+).refine(
+  data => {
+    if (data.isAlive && data.deathYear) return false
+    return true
+  },
+  { message: 'لا يمكن تحديد سنة وفاة لشخص على قيد الحياة', path: ['deathYear'] }
+)
 
 type MemberForm = z.infer<typeof memberSchema>
 
@@ -70,7 +87,17 @@ export function AddMemberModal({ treeId, relativeOf, onSuccess, onClose }: AddMe
     },
   })
 
-  const isAlive = watch('isAlive')
+  const isAlive  = watch('isAlive')
+  const lineage  = watch('lineage')
+
+  // Auto-fill father/grandfather from lineage string (Task 4: Lineage Extraction)
+  const handleLineageBlur = () => {
+    if (!lineage) return
+    const { fatherName, grandfatherName } = extractParentsFromLineage(lineage)
+    // Only auto-fill if fields are empty
+    if (fatherName && !watch('fatherName'))         setValue('fatherName', fatherName)
+    if (grandfatherName && !watch('grandfatherName')) setValue('grandfatherName', grandfatherName)
+  }
 
   async function onSubmit(data: MemberForm) {
     try {
@@ -289,15 +316,16 @@ export function AddMemberModal({ treeId, relativeOf, onSuccess, onClose }: AddMe
               </div>
             </div>
 
-            {/* Lineage */}
+            {/* Lineage — auto-fills father/grandfather on blur (Task 4) */}
             <div>
               <label className="label">النسب (سلسلة الأجداد)</label>
               <input
                 {...register('lineage')}
+                onBlur={handleLineageBlur}
                 placeholder="أحمد بن إبراهيم بن علي بن محمد..."
                 className="input"
               />
-              <p className="text-xs text-khartoum-400 mt-1">ادخل سلسلة الأجداد مفصولة بـ "بن/بنت"</p>
+              <p className="text-xs text-khartoum-400 mt-1">ادخل سلسلة الأجداد مفصولة بـ "بن/بنت" — يتم ملء اسم الأب والجد تلقائياً</p>
             </div>
 
             {/* Bio */}

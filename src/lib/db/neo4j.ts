@@ -327,16 +327,40 @@ export async function countParentsByGender(
        RETURN count(parent) AS cnt`,
       { childId: childPostgresId, gender }
     )
-    const cnt = records[0]?.cnt
-    if (typeof cnt === 'number') return cnt
-    // Neo4j driver returns integers as { low, high } objects
-    if (cnt !== null && typeof cnt === 'object' && 'low' in (cnt as object)) {
-      return (cnt as { low: number }).low
-    }
-    return 0
+    return toInt(records[0]?.cnt)
   } catch {
     return 0
   }
+}
+
+/**
+ * Detect if adding a PARENT_OF edge from fromId to toId would create a cycle.
+ * A cycle means: toId is already an ancestor of fromId.
+ * If toId -[:PARENT_OF*]-> fromId exists, then adding fromId -PARENT_OF-> toId = cycle.
+ */
+export async function wouldCreateCycle(
+  fromPostgresId: string,
+  toPostgresId: string
+): Promise<boolean> {
+  try {
+    const records = await runQuery<{ pathExists: unknown }>(
+      `OPTIONAL MATCH path = (a:Person {postgresId: $toId})-[:PARENT_OF*1..20]->(b:Person {postgresId: $fromId})
+       RETURN path IS NOT NULL AS pathExists`,
+      { fromId: fromPostgresId, toId: toPostgresId }
+    )
+    return records[0]?.pathExists === true
+  } catch {
+    return false
+  }
+}
+
+/** Safe integer extraction from Neo4j results (handles {low, high} objects) */
+function toInt(val: unknown): number {
+  if (typeof val === 'number') return val
+  if (val !== null && typeof val === 'object' && 'low' in (val as object)) {
+    return (val as { low: number }).low
+  }
+  return 0
 }
 
 // ─────────────────────────────────────────────
@@ -348,9 +372,10 @@ function buildTreeFromGraph(
   rootId: string
 ): TreeNode | null {
   // Flatten all nodes and rels
-  const nodeMap = new Map<string, GraphPerson>()
-  const childMap = new Map<string, string[]>() // parentId -> [childId]
-  const spouseMap = new Map<string, string[]>()
+  const nodeMap    = new Map<string, GraphPerson>()
+  const childMap   = new Map<string, string[]>()   // parentId -> [childId]
+  const spouseMap  = new Map<string, string[]>()
+  const siblingMap = new Map<string, Set<string>>() // personId -> sibling IDs
 
   for (const record of records) {
     for (const node of record.nodes) {
@@ -359,12 +384,36 @@ function buildTreeFromGraph(
     for (const rel of record.relationships) {
       if (rel.type === 'PARENT_OF') {
         const children = childMap.get(rel.start) || []
-        children.push(rel.end)
+        if (!children.includes(rel.end)) children.push(rel.end)
         childMap.set(rel.start, children)
       } else if (rel.type === 'SPOUSE_OF') {
         const spouses = spouseMap.get(rel.start) || []
-        spouses.push(rel.end)
+        if (!spouses.includes(rel.end)) spouses.push(rel.end)
         spouseMap.set(rel.start, spouses)
+      } else if (rel.type === 'SIBLING_OF') {
+        // Track sibling relationships for later resolution
+        if (!siblingMap.has(rel.start)) siblingMap.set(rel.start, new Set())
+        if (!siblingMap.has(rel.end))   siblingMap.set(rel.end, new Set())
+        siblingMap.get(rel.start)!.add(rel.end)
+        siblingMap.get(rel.end)!.add(rel.start)
+      }
+    }
+  }
+
+  // Resolve siblings: if person A has siblings but no parent link in the tree,
+  // check if any sibling already has a parent → add A as child of that parent too.
+  // This ensures siblings appear at the same level under the same parent.
+  for (const [personId, siblings] of siblingMap) {
+    const hasParent = [...childMap.values()].some(kids => kids.includes(personId))
+    if (hasParent) continue
+
+    for (const sibId of siblings) {
+      // Find if sibling has a parent
+      for (const [parentId, kids] of childMap) {
+        if (kids.includes(sibId) && !kids.includes(personId)) {
+          kids.push(personId)
+          break
+        }
       }
     }
   }
@@ -376,7 +425,7 @@ function buildTreeFromGraph(
     const person = nodeMap.get(id)
     if (!person) return null
 
-    const childIds = childMap.get(id) || []
+    const childIds  = childMap.get(id) || []
     const spouseIds = spouseMap.get(id) || []
 
     return {
