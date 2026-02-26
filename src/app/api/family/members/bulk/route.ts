@@ -51,11 +51,15 @@ export async function POST(req: NextRequest) {
     })
     if (!tree) return NextResponse.json({ success: false, error: 'غير مصرّح أو الشجرة غير موجودة' }, { status: 403 })
 
-    // Resolve relative's neo4j ID upfront (single DB call)
+    // Resolve relative upfront (single DB call)
     let relativeNeo4jId: string | null = null
+    let relativePostgresId: string | null = null
     if (data.relativeOfId && data.relationshipType) {
       const relative = await prisma.treeMember.findUnique({ where: { id: data.relativeOfId } })
-      if (relative) relativeNeo4jId = relative.neo4jPersonId
+      if (relative) {
+        relativeNeo4jId   = relative.neo4jPersonId
+        relativePostgresId = relative.id
+      }
     }
 
     // Create all members in parallel
@@ -95,13 +99,21 @@ export async function POST(req: NextRequest) {
           tribe:          data.tribe || null,
         }).catch(err => console.warn('Neo4j createPerson failed:', err.message))
 
-        // Relationship — non-blocking best-effort
+        // Relationship — corrected direction, non-blocking
         if (relativeNeo4jId && data.relationshipType) {
-          createRelationship(
-            relativeNeo4jId,
-            neo4jPersonId,
-            data.relationshipType as any
-          ).catch(err => console.warn('Neo4j createRelationship failed:', err.message))
+          const relType = data.relationshipType
+          if (relType === 'CHILD_OF') {
+            // new member is child of existing → existing -PARENT_OF-> new
+            createRelationship(relativeNeo4jId, neo4jPersonId, 'PARENT_OF')
+              .catch(err => console.warn('Neo4j createRelationship failed:', err.message))
+          } else if (relType === 'PARENT_OF') {
+            // new member is parent of existing → new -PARENT_OF-> existing
+            createRelationship(neo4jPersonId, relativeNeo4jId, 'PARENT_OF')
+              .catch(err => console.warn('Neo4j createRelationship failed:', err.message))
+          } else {
+            createRelationship(relativeNeo4jId, neo4jPersonId, relType as any)
+              .catch(err => console.warn('Neo4j createRelationship failed:', err.message))
+          }
         }
 
         return member

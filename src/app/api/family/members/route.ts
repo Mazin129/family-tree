@@ -4,7 +4,7 @@ import { authOptions } from '@/lib/auth/auth-options'
 import { prisma }      from '@/lib/db/prisma'
 import { z }           from 'zod'
 import { v4 as uuid }  from 'uuid'
-import { createPerson, createRelationship } from '@/lib/db/neo4j'
+import { createPerson, createRelationship, countParentsByGender } from '@/lib/db/neo4j'
 
 const addMemberSchema = z.object({
   treeId:           z.string(),
@@ -112,15 +112,44 @@ export async function POST(req: NextRequest) {
       tribe:          data.tribe || null,
     }).catch(err => console.warn('Neo4j person creation failed:', err.message))
 
-    // Create relationship if adding relative
+    // Create relationship if adding relative — with corrected direction
     if (data.relativeOfId && data.relationshipType) {
       const relative = await prisma.treeMember.findUnique({ where: { id: data.relativeOfId } })
       if (relative) {
-        createRelationship(
-          relative.neo4jPersonId,
-          neo4jPersonId,
-          data.relationshipType as any
-        ).catch(err => console.warn('Neo4j relationship creation failed:', err.message))
+        const relType = data.relationshipType
+
+        if (relType === 'CHILD_OF') {
+          // UI label "ابن/ابنة": new person IS a child of the existing person
+          // → existing -PARENT_OF-> new
+          createRelationship(relative.neo4jPersonId, neo4jPersonId, 'PARENT_OF')
+            .catch(err => console.warn('Neo4j relationship creation failed:', err.message))
+
+        } else if (relType === 'PARENT_OF') {
+          // UI label "والد/والدة": new person IS a parent of the existing person
+          // → new -PARENT_OF-> existing  (reversed!)
+          // First validate: existing member must not already have a parent of same gender
+          try {
+            const existingParents = await countParentsByGender(relative.neo4jPersonId, data.gender)
+            if (existingParents >= 1) {
+              // Roll back the PostgreSQL member we just created
+              await prisma.treeMember.delete({ where: { id: member.id } })
+              const genderLabel = data.gender === 'MALE' ? 'والد' : data.gender === 'FEMALE' ? 'والدة' : 'والد/والدة'
+              return NextResponse.json(
+                { success: false, error: `${relative.fullNameArabic || relative.fullName} لديه بالفعل ${genderLabel} مسجّل` },
+                { status: 422 }
+              )
+            }
+          } catch {
+            // Neo4j unavailable — skip validation, create anyway
+          }
+          createRelationship(neo4jPersonId, relative.neo4jPersonId, 'PARENT_OF')
+            .catch(err => console.warn('Neo4j relationship creation failed:', err.message))
+
+        } else {
+          // SPOUSE_OF, SIBLING_OF, HALF_SIBLING_OF, etc. — direction unchanged
+          createRelationship(relative.neo4jPersonId, neo4jPersonId, relType as any)
+            .catch(err => console.warn('Neo4j relationship creation failed:', err.message))
+        }
       }
     }
 

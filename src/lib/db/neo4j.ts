@@ -309,6 +309,37 @@ export async function suggestMissingLinks(postgresId: string): Promise<{
 }
 
 // ─────────────────────────────────────────────
+// VALIDATION HELPERS
+// ─────────────────────────────────────────────
+
+/**
+ * Count existing parents of a child node that have the given gender.
+ * Used to prevent adding a second father or second mother.
+ */
+export async function countParentsByGender(
+  childPostgresId: string,
+  gender: string
+): Promise<number> {
+  try {
+    const records = await runQuery<{ cnt: unknown }>(
+      `MATCH (parent:Person)-[:PARENT_OF]->(child:Person {postgresId: $childId})
+       WHERE parent.gender = $gender
+       RETURN count(parent) AS cnt`,
+      { childId: childPostgresId, gender }
+    )
+    const cnt = records[0]?.cnt
+    if (typeof cnt === 'number') return cnt
+    // Neo4j driver returns integers as { low, high } objects
+    if (cnt !== null && typeof cnt === 'object' && 'low' in (cnt as object)) {
+      return (cnt as { low: number }).low
+    }
+    return 0
+  } catch {
+    return 0
+  }
+}
+
+// ─────────────────────────────────────────────
 // INTERNAL HELPERS
 // ─────────────────────────────────────────────
 

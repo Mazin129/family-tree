@@ -89,17 +89,15 @@ export async function DELETE(
   }
 }
 
-// Helper: build visualization from PostgreSQL when Neo4j is unavailable
+// Helper: fallback visualization when Neo4j is unavailable.
+// Returns only the root node — better to show one correct node than fake relationships.
 async function buildFlatVisualization(treeId: string) {
-  const members = await prisma.treeMember.findMany({
-    where: { treeId },
-    orderBy: { birthYear: 'asc' },
+  const root = await prisma.treeMember.findFirst({
+    where:   { treeId },
+    orderBy: { createdAt: 'asc' },
   })
+  if (!root) return null
 
-  if (members.length === 0) return null
-
-  // Simple: first member is root, rest are children
-  const root = members[0]
   return {
     id:           root.id,
     name:         root.fullName,
@@ -112,19 +110,7 @@ async function buildFlatVisualization(treeId: string) {
     tribe:        root.tribe,
     privacyLevel: root.privacyLevel,
     postgresId:   root.id,
-    children:     members.slice(1).map(m => ({
-      id:           m.id,
-      name:         m.fullName,
-      nameArabic:   m.fullNameArabic,
-      gender:       m.gender,
-      birthYear:    m.birthYear,
-      deathYear:    m.deathYear,
-      isAlive:      m.isAlive,
-      photo:        m.photo,
-      tribe:        m.tribe,
-      privacyLevel: m.privacyLevel,
-      postgresId:   m.id,
-      children:     [],
-    })),
+    children:     [],
+    spouses:      [],
   }
 }
