@@ -4,36 +4,69 @@ import { prisma } from '@/lib/db/prisma'
 import Link from 'next/link'
 import {
   TreePine, Users, BookOpen, Sparkles, Plus,
-  ArrowLeft, TrendingUp, Globe, Bell,
+  ArrowLeft, Globe, Bell, AlertCircle,
 } from 'lucide-react'
 
 export default async function DashboardPage() {
   const session = await getServerSession(authOptions)
   const userId  = (session?.user as any)?.id
 
-  // Fetch user stats
-  const [treeCount, postCount, notifications] = await Promise.all([
-    prisma.familyTree.count({ where: { ownerId: userId } }),
-    prisma.communityPost.count({ where: { authorId: userId } }),
-    prisma.notification.findMany({
-      where: { userId, isRead: false },
-      orderBy: { createdAt: 'desc' },
-      take: 5,
-    }),
-  ])
+  // ── Fetch stats — graceful fallback if DB is unavailable ──────────────────
+  let treeCount     = 0
+  let postCount     = 0
+  let notifications: { id: string; title: string; message: string }[] = []
+  let recentTrees:   any[] = []
+  let dbError       = false
 
-  const recentTrees = await prisma.familyTree.findMany({
-    where: { ownerId: userId },
-    orderBy: { updatedAt: 'desc' },
-    take: 4,
-    include: { _count: { select: { members: true } } },
-  })
+  try {
+    const [tc, pc, notifs] = await Promise.all([
+      prisma.familyTree.count({ where: { ownerId: userId } }),
+      prisma.communityPost.count({ where: { authorId: userId } }),
+      prisma.notification.findMany({
+        where: { userId, isRead: false },
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+      }),
+    ])
+    treeCount     = tc
+    postCount     = pc
+    notifications = notifs
+  } catch (err) {
+    console.error('[Dashboard] DB unavailable for stats:', (err as Error).message)
+    dbError = true
+  }
+
+  if (!dbError) {
+    try {
+      recentTrees = await prisma.familyTree.findMany({
+        where:   { ownerId: userId },
+        orderBy: { updatedAt: 'desc' },
+        take:    4,
+        include: { _count: { select: { members: true } } },
+      })
+    } catch (err) {
+      console.error('[Dashboard] DB unavailable for trees:', (err as Error).message)
+    }
+  }
 
   const userName = (session?.user as any)?.nameArabic || session?.user?.name || 'مستخدم'
 
   return (
-    <div className="page-container py-8">
-      {/* Header */}
+    <div className="page-container py-8" dir="rtl">
+      {/* ── DB warning banner ─────────────────────────────────────────────── */}
+      {dbError && (
+        <div className="mb-6 flex items-start gap-3 p-4 rounded-2xl bg-yellow-50 border border-yellow-200">
+          <AlertCircle className="w-5 h-5 text-yellow-600 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-semibold text-yellow-800">تعذّر الاتصال بقاعدة البيانات</p>
+            <p className="text-xs text-yellow-600 mt-0.5">
+              بعض البيانات قد لا تظهر الآن. سيتم إعادة المحاولة تلقائياً.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* ── Header ────────────────────────────────────────────────────────── */}
       <div className="mb-8 animate-fade-in">
         <h1 className="text-2xl font-bold text-khartoum-900">
           مرحباً، {userName} 👋
@@ -41,7 +74,9 @@ export default async function DashboardPage() {
         <p className="text-khartoum-500 mt-1">
           {(() => {
             try {
-              return new Intl.DateTimeFormat('ar', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }).format(new Date())
+              return new Intl.DateTimeFormat('ar', {
+                weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+              }).format(new Date())
             } catch {
               return new Date().toLocaleDateString()
             }
@@ -49,40 +84,16 @@ export default async function DashboardPage() {
         </p>
       </div>
 
-      {/* Stats Grid */}
+      {/* ── Stats Grid ────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <StatCard
-          icon={TreePine}
-          label="شجرة عائلية"
-          value={treeCount}
-          color="bg-sand-500"
-          href="/tree"
-        />
-        <StatCard
-          icon={Users}
-          label="منشور مجتمعي"
-          value={postCount}
-          color="bg-nile-600"
-          href="/community"
-        />
-        <StatCard
-          icon={Globe}
-          label="قبيلة موثقة"
-          value={50}
-          color="bg-sahara-500"
-          href="/community/heritage"
-        />
-        <StatCard
-          icon={Bell}
-          label="إشعار جديد"
-          value={notifications.length}
-          color="bg-acacia-600"
-          href="/notifications"
-        />
+        <StatCard icon={TreePine} label="شجرة عائلية"    value={treeCount}            color="bg-sand-500"   href="/tree"                 />
+        <StatCard icon={Users}    label="منشور مجتمعي"   value={postCount}            color="bg-nile-600"   href="/community"             />
+        <StatCard icon={Globe}    label="قبيلة موثقة"    value={50}                   color="bg-sahara-500" href="/community/heritage"    />
+        <StatCard icon={Bell}     label="إشعار جديد"     value={notifications.length} color="bg-acacia-600" href="/notifications"         />
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6">
-        {/* My Trees */}
+        {/* ── My Trees ──────────────────────────────────────────────────── */}
         <div className="lg:col-span-2">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-bold text-khartoum-900 text-lg">شجراتي العائلية</h2>
@@ -97,7 +108,9 @@ export default async function DashboardPage() {
                 <TreePine className="w-8 h-8 text-sand-400" />
               </div>
               <h3 className="font-semibold text-khartoum-800 mb-2">لا توجد شجرة عائلية بعد</h3>
-              <p className="text-khartoum-500 text-sm mb-6">ابدأ ببناء شجرتك العائلية الآن وسجّل نسبك للأجيال القادمة</p>
+              <p className="text-khartoum-500 text-sm mb-6">
+                ابدأ ببناء شجرتك العائلية الآن وسجّل نسبك للأجيال القادمة
+              </p>
               <Link href="/tree/new" className="btn-primary">
                 <Plus className="w-4 h-4" />
                 أنشئ شجرتك الأولى
@@ -124,13 +137,10 @@ export default async function DashboardPage() {
                     <span className={`badge-sand text-xs ${tree.isPublic ? 'bg-acacia-100 text-acacia-700' : 'bg-khartoum-100 text-khartoum-600'}`}>
                       {tree.isPublic ? 'عامة' : 'خاصة'}
                     </span>
-                    {tree.region && (
-                      <span className="badge-sand text-xs">{tree.region}</span>
-                    )}
+                    {tree.region && <span className="badge-sand text-xs">{tree.region}</span>}
                   </div>
                 </Link>
               ))}
-
               <Link
                 href="/tree/new"
                 className="card p-5 border-dashed border-sand-300 bg-transparent hover:bg-sand-50 flex items-center justify-center gap-2 text-khartoum-400 hover:text-sand-600 transition-colors"
@@ -142,7 +152,7 @@ export default async function DashboardPage() {
           )}
         </div>
 
-        {/* Right column */}
+        {/* ── Right column ──────────────────────────────────────────────── */}
         <div className="space-y-6">
           {/* Quick actions */}
           <div className="card p-5">
@@ -206,14 +216,12 @@ export default async function DashboardPage() {
   )
 }
 
+/* ── Helpers ──────────────────────────────────────────────────────────────── */
+
 function StatCard({
   icon: Icon, label, value, color, href,
 }: {
-  icon: React.ElementType
-  label: string
-  value: number
-  color: string
-  href: string
+  icon: React.ElementType; label: string; value: number; color: string; href: string
 }) {
   return (
     <Link href={href} className="card-hover p-5 flex items-center gap-4 group">
@@ -229,8 +237,8 @@ function StatCard({
 }
 
 const QUICK_ACTIONS = [
-  { label: 'إضافة فرد للعائلة',   href: '/tree/new',              icon: TreePine,   color: 'bg-sand-500'  },
-  { label: 'مشاركة في المجتمع',   href: '/community',             icon: Users,      color: 'bg-nile-600'  },
-  { label: 'رفع تاريخ شفهي',       href: '/community/oral-history', icon: BookOpen,   color: 'bg-sahara-500'},
-  { label: 'استكشاف قبائل السودان', href: '/community/heritage',   icon: Globe,      color: 'bg-acacia-600'},
+  { label: 'إضافة فرد للعائلة',    href: '/tree/new',               icon: TreePine, color: 'bg-sand-500'   },
+  { label: 'مشاركة في المجتمع',    href: '/community',              icon: Users,    color: 'bg-nile-600'   },
+  { label: 'رفع تاريخ شفهي',        href: '/community/oral-history', icon: BookOpen, color: 'bg-sahara-500' },
+  { label: 'استكشاف قبائل السودان', href: '/community/heritage',    icon: Globe,    color: 'bg-acacia-600' },
 ]

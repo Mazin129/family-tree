@@ -2,35 +2,50 @@ import { getServerSession } from 'next-auth'
 import { authOptions }      from '@/lib/auth/auth-options'
 import { prisma }           from '@/lib/db/prisma'
 import Link                 from 'next/link'
-import { TreePine, Plus, Lock, Globe, Users } from 'lucide-react'
+import { TreePine, Plus, Lock, Globe, Users, AlertCircle } from 'lucide-react'
 
 export default async function TreeListPage() {
   const session = await getServerSession(authOptions)
   const userId  = (session?.user as any)?.id
 
-  const trees = await prisma.familyTree.findMany({
-    where: { ownerId: userId },
-    orderBy: { updatedAt: 'desc' },
-    include: {
-      _count: { select: { members: true, collaborations: true } },
-      tags:   true,
-    },
-  })
+  let trees:       any[] = []
+  let sharedTrees: any[] = []
+  let dbError            = false
 
-  const sharedTrees = await prisma.treeCollaboration.findMany({
-    where: { userId },
-    include: {
-      tree: {
-        include: {
-          owner: { select: { name: true, nameArabic: true } },
-          _count: { select: { members: true } },
+  try {
+    trees = await prisma.familyTree.findMany({
+      where:   { ownerId: userId },
+      orderBy: { updatedAt: 'desc' },
+      include: {
+        _count: { select: { members: true, collaborations: true } },
+        tags:   true,
+      },
+    })
+
+    sharedTrees = await prisma.treeCollaboration.findMany({
+      where: { userId },
+      include: {
+        tree: {
+          include: {
+            owner: { select: { name: true, nameArabic: true } },
+            _count: { select: { members: true } },
+          },
         },
       },
-    },
-  })
+    })
+  } catch (err) {
+    console.error('[TreeList] DB unavailable:', (err as Error).message)
+    dbError = true
+  }
 
   return (
-    <div className="page-container py-8">
+    <div className="page-container py-8" dir="rtl">
+      {dbError && (
+        <div className="mb-6 flex items-start gap-3 p-4 rounded-2xl bg-yellow-50 border border-yellow-200">
+          <AlertCircle className="w-5 h-5 text-yellow-600 shrink-0 mt-0.5" />
+          <p className="text-sm text-yellow-800">تعذّر الاتصال بقاعدة البيانات — يُرجى إعادة المحاولة لاحقاً.</p>
+        </div>
+      )}
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="section-title">شجراتي العائلية</h1>
@@ -101,7 +116,7 @@ export default async function TreeListPage() {
 
               {tree.tags.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 mt-3">
-                  {tree.tags.slice(0, 3).map(tag => (
+                  {tree.tags.slice(0, 3).map((tag: { tag: string }) => (
                     <span key={tag.tag} className="badge bg-sand-50 text-sand-700 border border-sand-200 text-xs">
                       #{tag.tag}
                     </span>
