@@ -7,7 +7,7 @@ import Link from 'next/link'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { TreePine, Mail, Lock, Eye, EyeOff, Loader2 } from 'lucide-react'
+import { TreePine, Mail, Lock, Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { useLanguage } from '@/lib/i18n/store'
 import { createT } from '@/lib/i18n/translations'
@@ -17,8 +17,18 @@ function LoginForm() {
   const router       = useRouter()
   const searchParams = useSearchParams()
   const callbackUrl  = searchParams.get('callbackUrl') || '/dashboard'
-  const [showPass, setShowPass]         = useState(false)
+  const [showPass, setShowPass]           = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
+  const [googleEnabled, setGoogleEnabled] = useState<boolean | null>(null)
+  const [redirectUri,   setRedirectUri]   = useState('')
+
+  // Check if Google OAuth is properly configured
+  useState(() => {
+    fetch('/api/auth/google-status')
+      .then(r => r.json())
+      .then(d => { setGoogleEnabled(d.enabled); setRedirectUri(d.redirectUri) })
+      .catch(() => setGoogleEnabled(false))
+  })
 
   const { locale, dir } = useLanguage()
   const t = createT(locale)
@@ -78,10 +88,26 @@ function LoginForm() {
 
         <div className="card p-8">
           {/* Google OAuth */}
+          {googleEnabled === false && (
+            <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 space-y-1" dir="ltr">
+              <div className="flex items-center gap-1.5 font-semibold">
+                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                Google Sign-In not configured
+              </div>
+              <p>Add to <code className="bg-amber-100 px-1 rounded">.env</code>:</p>
+              <pre className="bg-amber-100 rounded p-1.5 text-[10px] leading-relaxed overflow-x-auto">{`GOOGLE_CLIENT_ID=….apps.googleusercontent.com\nGOOGLE_CLIENT_SECRET=GOCSPX-…`}</pre>
+              {redirectUri && (
+                <p>Authorized redirect URI in Google Console:<br />
+                  <code className="bg-amber-100 px-1 rounded break-all">{redirectUri}</code>
+                </p>
+              )}
+            </div>
+          )}
           <button
             onClick={handleGoogle}
-            disabled={googleLoading || isSubmitting}
-            className="btn-secondary w-full mb-6 py-3"
+            disabled={googleLoading || isSubmitting || googleEnabled === false}
+            title={googleEnabled === false ? 'Google Sign-In not configured — see instructions above' : undefined}
+            className="btn-secondary w-full mb-6 py-3 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {googleLoading ? (
               <Loader2 className="w-5 h-5 animate-spin" />

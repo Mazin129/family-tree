@@ -79,6 +79,8 @@ model User {
   notifications     Notification[]
   privacySettings   PrivacySettings?
   auditLogs         AuditLog[]
+  invitesCreated    InviteToken[]       @relation("InviteCreated")
+  invitesUsed       InviteToken[]       @relation("InviteUsed")
 
   @@index([email])
 }
@@ -129,6 +131,7 @@ model FamilyTree {
   members        TreeMember[]
   collaborations TreeCollaboration[]
   tags           FamilyTreeTag[]
+  inviteTokens   InviteToken[]
 
   @@index([ownerId])
 }
@@ -221,6 +224,25 @@ model TreeCollaboration {
   user User       @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([treeId, userId])
+}
+
+model InviteToken {
+  id          String           @id @default(cuid())
+  treeId      String
+  token       String           @unique @default(cuid())
+  role        CollaboratorRole @default(EDITOR)
+  createdById String
+  createdAt   DateTime         @default(now())
+  expiresAt   DateTime
+  usedAt      DateTime?
+  usedById    String?
+
+  tree      FamilyTree @relation(fields: [treeId],      references: [id], onDelete: Cascade)
+  createdBy User       @relation("InviteCreated", fields: [createdById], references: [id])
+  usedBy    User?      @relation("InviteUsed",    fields: [usedById],    references: [id])
+
+  @@index([treeId])
+  @@index([token])
 }
 
 // ─────────────────────────────────────────────

@@ -5,6 +5,21 @@ import CredentialsProvider from 'next-auth/providers/credentials'
 import bcrypt from 'bcryptjs'
 import { prisma } from '@/lib/db/prisma'
 
+// Real credentials are present when they exist and are not the placeholder values
+const GOOGLE_CLIENT_ID     = process.env.GOOGLE_CLIENT_ID     || ''
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || ''
+const googleConfigured =
+  GOOGLE_CLIENT_ID.length > 0 &&
+  !GOOGLE_CLIENT_ID.startsWith('your-google') &&
+  GOOGLE_CLIENT_SECRET.length > 0 &&
+  !GOOGLE_CLIENT_SECRET.startsWith('your-google')
+
+export const GOOGLE_OAUTH_ENABLED = googleConfigured
+
+// The exact redirect URI that must be registered in Google Cloud Console:
+//   {NEXTAUTH_URL}/api/auth/callback/google
+// e.g. https://sudandna.com/api/auth/callback/google
+
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma) as any,
   session: { strategy: 'jwt' },
@@ -14,19 +29,28 @@ export const authOptions: NextAuthOptions = {
     error:   '/login',
   },
   providers: [
-    GoogleProvider({
-      clientId:     process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-      profile(profile) {
-        return {
-          id:    profile.sub,
-          name:  profile.name,
-          email: profile.email,
-          image: profile.picture,
-          role:  'MEMBER',
-        }
-      },
-    }),
+    ...(googleConfigured
+      ? [GoogleProvider({
+          clientId:     GOOGLE_CLIENT_ID,
+          clientSecret: GOOGLE_CLIENT_SECRET,
+          authorization: {
+            params: {
+              prompt: 'consent',
+              access_type: 'offline',
+              response_type: 'code',
+            },
+          },
+          profile(profile) {
+            return {
+              id:    profile.sub,
+              name:  profile.name,
+              email: profile.email,
+              image: profile.picture,
+              role:  'MEMBER',
+            }
+          },
+        })]
+      : []),
 
     CredentialsProvider({
       name: 'credentials',

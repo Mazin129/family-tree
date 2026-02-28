@@ -6,6 +6,7 @@ import { FamilyTreeCanvas }  from '@/components/family-tree/FamilyTreeCanvas'
 import { MemberCard }        from '@/components/family-tree/MemberCard'
 import { AddMemberModal }     from '@/components/family-tree/AddMemberModal'
 import { BulkAddMembersModal } from '@/components/family-tree/BulkAddMembersModal'
+import { ShareModal }        from '@/components/family-tree/ShareModal'
 import { AIInsightsPanel }   from '@/components/ai/AIInsightsPanel'
 import { toast }             from 'sonner'
 import {
@@ -26,10 +27,11 @@ export default function TreeViewPage() {
   const [members,        setMembers]       = useState<TreeMember[]>([])
   const [selectedMember, setSelectedMember] = useState<TreeMember | null>(null)
   const [showAddModal,   setShowAddModal]  = useState(false)
-  const [showBulkModal,  setShowBulkModal] = useState(false)
-  const [addRelativeTo,  setAddRelativeTo] = useState<TreeMember | null>(null)
-  const [activeTab,      setActiveTab]     = useState<Tab>('tree')
-  const [loading,        setLoading]       = useState(true)
+  const [showBulkModal,  setShowBulkModal]  = useState(false)
+  const [showShareModal, setShowShareModal] = useState(false)
+  const [addRelativeTo,  setAddRelativeTo]  = useState<TreeMember | null>(null)
+  const [activeTab,      setActiveTab]      = useState<Tab>('tree')
+  const [loading,        setLoading]        = useState(true)
 
   const fetchTree = useCallback(async () => {
     try {
@@ -134,8 +136,11 @@ export default function TreeViewPage() {
             <Plus className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">إضافة فرد</span>
           </button>
-          <button title="مشاركة"
-            className="w-9 h-9 rounded-xl border border-sand-200 flex items-center justify-center hover:bg-sand-50 transition-colors">
+          <button
+            title="مشاركة الشجرة"
+            onClick={() => setShowShareModal(true)}
+            className="w-9 h-9 rounded-xl border border-sand-200 flex items-center justify-center hover:bg-sand-50 transition-colors"
+          >
             <Share2 className="w-4 h-4 text-khartoum-500" />
           </button>
           <Link href={`/tree/${treeId}/settings`}
@@ -261,6 +266,14 @@ export default function TreeViewPage() {
           existingMembers={members}
           onSuccess={() => { fetchTree(); setAddRelativeTo(null) }}
           onClose={() => { setShowBulkModal(false); setAddRelativeTo(null) }}
+        />
+      )}
+
+      {showShareModal && tree && (
+        <ShareModal
+          treeId={treeId}
+          treeName={tree.nameArabic || tree.name}
+          onClose={() => setShowShareModal(false)}
         />
       )}
     </div>
