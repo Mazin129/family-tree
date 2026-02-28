@@ -17,8 +17,14 @@ const editSchema = z.object({
   grandfatherName: z.string().optional().or(z.literal('')),
   gender:         z.enum(['MALE', 'FEMALE', 'UNSPECIFIED']),
   isAlive:        z.boolean(),
-  birthYear:      z.number().int().min(1600).max(new Date().getFullYear()).optional().nullable(),
-  deathYear:      z.number().int().min(1600).max(new Date().getFullYear()).optional().nullable(),
+  birthYear:      z.preprocess(
+    v => (v === '' || v === null || v === undefined || (typeof v === 'number' && Number.isNaN(v)) ? undefined : v),
+    z.number().int().min(1600).max(new Date().getFullYear()).optional().nullable()
+  ),
+  deathYear:      z.preprocess(
+    v => (v === '' || v === null || v === undefined || (typeof v === 'number' && Number.isNaN(v)) ? undefined : v),
+    z.number().int().min(1600).max(new Date().getFullYear()).optional().nullable()
+  ),
   birthPlace:     z.string().optional().or(z.literal('')),
   birthRegion:    z.string().optional().or(z.literal('')),
   tribe:          z.string().optional().or(z.literal('')),
@@ -208,7 +214,7 @@ export function EditMemberModal({ member, onSuccess, onClose }: EditMemberModalP
               </div>
               <div className="flex items-center gap-3 mt-6">
                 <input {...register('isAlive')} type="checkbox" id="editIsAlive" className="h-4 w-4 rounded border-khartoum-300 text-sand-500" />
-                <label htmlFor="editIsAlive" className="text-sm text-khartoum-700">لا يزال على قيد الحياة <span className="text-khartoum-400 font-normal">(يمكن تغيير الحالة دون إلزام بحقل سنة الوفاة)</span></label>
+                <label htmlFor="editIsAlive" className="text-sm text-khartoum-700">لا يزال على قيد الحياة</label>
               </div>
               {!isAlive && (
                 <div>
