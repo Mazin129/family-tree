@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, Suspense } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { signIn } from 'next-auth/react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
@@ -23,12 +23,12 @@ function LoginForm() {
   const [redirectUri,   setRedirectUri]   = useState('')
 
   // Check if Google OAuth is properly configured
-  useState(() => {
+  useEffect(() => {
     fetch('/api/auth/google-status')
       .then(r => r.json())
       .then(d => { setGoogleEnabled(d.enabled); setRedirectUri(d.redirectUri) })
       .catch(() => setGoogleEnabled(false))
-  })
+  }, [])
 
   const { locale, dir } = useLanguage()
   const t = createT(locale)
