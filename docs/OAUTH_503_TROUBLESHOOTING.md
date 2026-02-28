@@ -4,6 +4,42 @@ When you see **`/api/auth/signin?error=OAuthCallback`** and a **503 Service Temp
 
 ---
 
+## If logs show `invalid_client (Unauthorized)` — fix Google credentials
+
+If **PM2/app logs** show:
+
+```text
+[next-auth][error][OAUTH_CALLBACK_ERROR]
+invalid_client (Unauthorized)
+providerId: 'google',
+message: 'invalid_client (Unauthorized)'
+```
+
+then **Google is rejecting your OAuth request**. The 503 is a side effect; fix the Google OAuth setup:
+
+1. **Check credentials on the server**
+   - Where the app runs (e.g. PM2 env or `.env`), confirm:
+     - `GOOGLE_CLIENT_ID` — full value, no spaces, from [Google Cloud Console](https://console.cloud.google.com/) → APIs & Services → Credentials.
+     - `GOOGLE_CLIENT_SECRET` — correct secret for that same OAuth 2.0 Client. If you regenerated the secret in Console, update it on the server and restart the app.
+   - Restart the app after changing env: `pm2 restart heritage` (or your app name).
+
+2. **Check redirect URI in Google Console**
+   - In the same OAuth 2.0 Client (Credentials → your Web client):
+     - **Authorized redirect URIs** must contain exactly:  
+       `https://sudandna.com/api/auth/callback/google`  
+       (no trailing slash, same host as your site).
+   - Your app uses `NEXTAUTH_URL` to build the callback URL; ensure `NEXTAUTH_URL=https://sudandna.com` (no trailing slash) on the server.
+
+3. **Client type**
+   - The credential must be a **Web application** (not Desktop or other). Under "Authorized redirect URIs" you should have the URL above.
+
+4. **No typos**
+   - Ensure no leading/trailing spaces in `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in your env file.
+
+After fixing, restart the app and try "Sign in with Google" again.
+
+---
+
 ## Quick deploy checklist (fix 503)
 
 1. **On the server:** Ensure the Next.js app is running and listening on the port nginx proxies to (e.g. 3000).  
@@ -20,11 +56,13 @@ When you see **`/api/auth/signin?error=OAuthCallback`** and a **503 Service Temp
 On the server:
 
 ```bash
-# Is anything listening on 3000?
+# 1) Ping — no DB. If this fails, the app is not reachable on port 3000.
+curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3000/api/ping
+# 2) Health — uses DB. If ping=200 but health=503, the database is down.
 curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3000/api/health
-# Should return 200. If connection refused or timeout, the app is down.
 ```
 
+- **If /api/ping is not 200:** App not running or wrong port. **If /api/ping is 200 but /api/health is 503:** DB down or wrong DATABASE_URL; fix DB first.
 - If using **PM2**: `pm2 list` and `pm2 logs` (look for crashes when you attempt Google sign-in).
 - If using **systemd**: `systemctl status your-app-service` and `journalctl -u your-app-service -f`.
 
@@ -111,3 +149,18 @@ Look for:
 - [ ] Database is reachable; no Prisma errors in logs during callback.
 
 After fixing, try signing in with Google again; the callback should complete and the 503 / OAuthCallback error should stop.
+
+---
+
+## 8. Still 503? — Narrow it down
+
+| Check | What it means |
+|-------|----------------|
+| `curl http://127.0.0.1:3000/api/ping` from the **server** | **200** = app process is up and nginx can reach it. **Connection refused / timeout** = app not running or wrong port (nginx expects 3000 by default). |
+| `curl http://127.0.0.1:3000/api/health` from the **server** | **200** = app + DB OK. **503** = DB unreachable; OAuth callback will hang or fail until DB works. |
+| From your **browser**: `https://sudandna.com/api/ping` | **200** = nginx → app works. **503** = nginx can’t reach app or nginx is misconfigured. |
+| **Logs at the moment you click “Sign in with Google”** | Look for `[NextAuth] Unhandled error:` or Prisma/DB errors. If you see an error, fix that (e.g. DB URL, missing table, network). |
+
+**If /api/ping is 200 from the server but https://sudandna.com/api/ping is 503:** nginx is not proxying to 127.0.0.1:3000 correctly, or another proxy in front is returning 503. Check nginx `upstream` and `proxy_pass` for `/api/`.
+
+**If the app crashes when the callback runs:** logs will show the exception. Common causes: wrong `DATABASE_URL`, Prisma schema not migrated, or missing env (e.g. `NEXTAUTH_SECRET`). The updated code now catches unhandled errors and redirects to sign-in instead of leaving the request hanging.
