@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth/auth-options'
+import { getMemberTreeAccess } from '@/lib/auth/tree-access'
 import { prisma }      from '@/lib/db/prisma'
 import { deletePerson, updatePerson } from '@/lib/db/neo4j'
 import { z } from 'zod'
@@ -31,6 +32,11 @@ export async function GET(
   if (!session) return NextResponse.json({ success: false, error: 'غير مصرّح' }, { status: 401 })
 
   const { memberId } = await params
+  const userId = (session.user as any).id
+  const access = await getMemberTreeAccess(userId, memberId)
+  if (!access.canView) {
+    return NextResponse.json({ success: false, error: 'غير موجود أو غير مصرّح' }, { status: 404 })
+  }
 
   try {
     const member = await prisma.treeMember.findUnique({ where: { id: memberId } })
@@ -56,23 +62,23 @@ export async function PATCH(
     const body = await req.json()
     const data = updateSchema.parse(body)
 
-    // Verify access
+    const access = await getMemberTreeAccess(userId, memberId)
+    if (!access.canEdit) {
+      return NextResponse.json({ success: false, error: 'غير مصرّح' }, { status: 403 })
+    }
     const member = await prisma.treeMember.findUnique({
       where: { id: memberId },
       include: { tree: true },
     })
     if (!member) return NextResponse.json({ success: false, error: 'غير موجود' }, { status: 404 })
-    if (member.tree.ownerId !== userId) {
-      return NextResponse.json({ success: false, error: 'غير مصرّح' }, { status: 403 })
-    }
 
     const updated = await prisma.treeMember.update({
       where: { id: memberId },
       data:  data as any,
     })
 
-    // Sync to Neo4j (best effort)
-    updatePerson(member.neo4jPersonId, {
+    // Sync to Neo4j (best effort) — use postgresId (member.id), not neo4jPersonId
+    updatePerson(member.id, {
       fullName:       data.fullName || member.fullName,
       fullNameArabic: data.fullNameArabic ?? member.fullNameArabic,
       gender:         (data.gender || member.gender) as any,
@@ -102,20 +108,22 @@ export async function DELETE(
   const userId = (session.user as any).id
   const { memberId } = await params
 
+  const access = await getMemberTreeAccess(userId, memberId)
+  if (!access.canEdit) {
+    return NextResponse.json({ success: false, error: 'غير مصرّح' }, { status: 403 })
+  }
+
   try {
     const member = await prisma.treeMember.findUnique({
       where:   { id: memberId },
       include: { tree: true },
     })
     if (!member) return NextResponse.json({ success: false, error: 'غير موجود' }, { status: 404 })
-    if (member.tree.ownerId !== userId) {
-      return NextResponse.json({ success: false, error: 'غير مصرّح' }, { status: 403 })
-    }
 
     await prisma.treeMember.delete({ where: { id: memberId } })
 
-    // Remove from Neo4j (best effort)
-    deletePerson(member.neo4jPersonId).catch(console.warn)
+    // Remove from Neo4j (best effort) — use postgresId (member.id)
+    deletePerson(member.id).catch(console.warn)
 
     return NextResponse.json({ success: true, message: 'تم حذف الفرد' })
   } catch (err) {

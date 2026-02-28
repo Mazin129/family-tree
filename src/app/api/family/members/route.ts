@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth/auth-options'
+import { getTreeAccess } from '@/lib/auth/tree-access'
 import { prisma }      from '@/lib/db/prisma'
 import { z }           from 'zod'
 import { v4 as uuid }  from 'uuid'
@@ -8,26 +9,25 @@ import { createPerson, createRelationship, countParentsByGender, wouldCreateCycl
 import { validateMember, validateParentChildAge, validateNoSelfRelation } from '@/lib/utils/validation'
 
 const addMemberSchema = z.object({
-  treeId:           z.string(),
-  fullName:         z.string().optional().nullable(),
-  fullNameArabic:   z.string().optional().nullable(),
-  fatherName:       z.string().optional().nullable(),
-  grandfatherName:  z.string().optional().nullable(),
+  treeId:           z.string().max(100),
+  fullName:         z.string().max(200).optional().nullable(),
+  fullNameArabic:   z.string().max(200).optional().nullable(),
+  fatherName:       z.string().max(200).optional().nullable(),
+  grandfatherName:  z.string().max(200).optional().nullable(),
   gender:           z.enum(['MALE', 'FEMALE', 'UNSPECIFIED']),
   isAlive:          z.boolean().default(true),
-  birthYear:        z.number().optional().nullable(),
-  deathYear:        z.number().optional().nullable(),
-  birthPlace:       z.string().optional().nullable(),
+  birthYear:        z.number().int().min(1600).max(new Date().getFullYear()).optional().nullable(),
+  deathYear:        z.number().int().min(1600).max(new Date().getFullYear()).optional().nullable(),
+  birthPlace:       z.string().max(200).optional().nullable(),
   birthRegion:      z.string().optional().nullable(),
-  tribe:            z.string().optional().nullable(),
-  clan:             z.string().optional().nullable(),
-  lineage:          z.string().optional().nullable(),
-  bio:              z.string().optional().nullable(),
-  bioArabic:        z.string().optional().nullable(),
-  occupation:       z.string().optional().nullable(),
+  tribe:            z.string().max(100).optional().nullable(),
+  clan:             z.string().max(100).optional().nullable(),
+  lineage:          z.string().max(500).optional().nullable(),
+  bio:              z.string().max(5000).optional().nullable(),
+  bioArabic:        z.string().max(5000).optional().nullable(),
+  occupation:       z.string().max(200).optional().nullable(),
   privacyLevel:     z.enum(['PUBLIC', 'COMMUNITY', 'FAMILY', 'PRIVATE']).default('FAMILY'),
-  // For relationship creation
-  relativeOfId:     z.string().optional().nullable(),
+  relativeOfId:     z.string().max(100).optional().nullable(),
   relationshipType: z.string().optional().nullable(),
 })
 
@@ -38,6 +38,12 @@ export async function GET(req: NextRequest) {
 
   const treeId = req.nextUrl.searchParams.get('treeId')
   if (!treeId) return NextResponse.json({ success: false, error: 'treeId مطلوب' }, { status: 400 })
+
+  const userId = (session.user as any).id
+  const access = await getTreeAccess(userId, treeId)
+  if (!access.canView) {
+    return NextResponse.json({ success: false, error: 'غير مصرّح أو الشجرة غير موجودة' }, { status: 403 })
+  }
 
   try {
     const members = await prisma.treeMember.findMany({

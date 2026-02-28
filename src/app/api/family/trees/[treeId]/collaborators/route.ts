@@ -52,7 +52,9 @@ export async function POST(
   })
   if (!tree) return NextResponse.json({ success: false, error: 'غير موجود أو ليس لديك صلاحية' }, { status: 403 })
 
-  const { role = 'EDITOR', daysValid = 7 } = await req.json().catch(() => ({}))
+  const body = await req.json().catch(() => ({}))
+  const role = ['VIEWER', 'EDITOR', 'ADMIN'].includes(body.role) ? body.role : 'EDITOR'
+  const daysValid = Math.min(90, Math.max(1, Number(body.daysValid) || 7))
 
   const expiresAt = new Date()
   expiresAt.setDate(expiresAt.getDate() + Number(daysValid))

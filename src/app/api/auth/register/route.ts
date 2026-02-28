@@ -4,10 +4,10 @@ import { z } from 'zod'
 import { prisma } from '@/lib/db/prisma'
 
 const registerSchema = z.object({
-  name:             z.string().min(2, 'الاسم قصير جداً').max(100),
-  nameArabic:       z.string().min(2).max(100).optional(),
-  email:            z.string().email('البريد الإلكتروني غير صحيح'),
-  password:         z.string().min(8, 'كلمة المرور يجب أن تكون 8 أحرف على الأقل'),
+  name:             z.string().min(2, 'الاسم قصير جداً').max(100).trim(),
+  nameArabic:       z.string().min(2).max(100).trim().optional(),
+  email:            z.string().email('البريد الإلكتروني غير صحيح').max(254).trim().toLowerCase(),
+  password:         z.string().min(8, 'كلمة المرور يجب أن تكون 8 أحرف على الأقل').max(128),
   preferredLanguage: z.enum(['ARABIC', 'ENGLISH']).default('ARABIC'),
   consentGiven:     z.boolean().refine(v => v === true, 'يجب الموافقة على الشروط'),
 })

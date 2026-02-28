@@ -46,9 +46,9 @@ export async function GET(
     // If Postgres has only one node with no relationships, try Neo4j as fallback
     if (visualization && !(visualization as any).children?.length) {
       const rootMember = await prisma.treeMember.findFirst({ where: { treeId } })
-      if (rootMember?.neo4jPersonId) {
+      if (rootMember) {
         try {
-          const neo4jViz = await getTreeForVisualization(rootMember.neo4jPersonId)
+          const neo4jViz = await getTreeForVisualization(rootMember.id)
           if (neo4jViz && ((neo4jViz.children?.length ?? 0) > 0)) {
             visualization = neo4jViz
           }

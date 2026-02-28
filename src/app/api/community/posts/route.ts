@@ -5,14 +5,14 @@ import { prisma }      from '@/lib/db/prisma'
 import { z }           from 'zod'
 
 const createPostSchema = z.object({
-  title:       z.string().min(3),
-  titleArabic: z.string().optional(),
-  content:     z.string().min(10),
-  contentAr:   z.string().optional(),
+  title:       z.string().min(3).max(200).trim(),
+  titleArabic: z.string().max(200).trim().optional(),
+  content:     z.string().min(10).max(50000).trim(),
+  contentAr:   z.string().max(50000).trim().optional(),
   category:    z.enum(['HISTORY','CULTURE','TRADITION','FOLKLORE','POETRY','MUSIC','FOOD','LANGUAGE','GENEALOGY','NEWS','GENERAL']),
-  tribe:       z.string().optional(),
-  region:      z.string().optional(),
-  tags:        z.array(z.string()).optional().default([]),
+  tribe:       z.string().max(100).trim().optional(),
+  region:      z.string().max(50).trim().optional(),
+  tags:        z.array(z.string().max(50)).max(20).optional().default([]),
 })
 
 export async function GET(req: NextRequest) {
