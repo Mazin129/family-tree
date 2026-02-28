@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
         descriptionAr: data.descriptionAr,
         tribe:        data.tribe,
         clan:         data.clan,
-        region:       data.region as any,
+        region:       (data.region || undefined) as any,
         isPublic:     data.isPublic,
         neo4jTreeId,
         tags: {

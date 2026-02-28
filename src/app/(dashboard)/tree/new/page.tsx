@@ -22,7 +22,10 @@ const treeSchema = z.object({
   tribe:         z.string().optional(),
   clan:          z.string().optional(),
   region:        z.string().optional(),
-  isPublic:      z.boolean().default(false),
+  isPublic:      z.preprocess(
+    v => v === 'true' ? true : v === 'false' ? false : v,
+    z.boolean()
+  ).default(false),
   tags:          z.string().optional(),
 })
 
@@ -46,7 +49,8 @@ export default function NewTreePage() {
     defaultValues: { isPublic: false },
   })
 
-  const isPublic = watch('isPublic')
+  const isPublicRaw = watch('isPublic')
+  const isPublic = isPublicRaw === true || (isPublicRaw as any) === 'true'
 
   async function goNext() {
     const fields: (keyof TreeForm)[] = step === 1 ? ['nameArabic'] : []
