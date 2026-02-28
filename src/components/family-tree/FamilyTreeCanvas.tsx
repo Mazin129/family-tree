@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import * as d3 from 'd3'
 import type { TreeNode } from '@/types'
+import { tatweelName } from '@/lib/utils/arabic'
 
 interface FamilyTreeCanvasProps {
   data:         TreeNode
@@ -168,8 +169,9 @@ export function FamilyTreeCanvas({
       const avFg    = alive ? (isMale ? MALE_AV_FG   : FEMALE_AV_FG)  : DEAD_AV_FG
       const textClr = alive ? (isMale ? MALE_TEXT    : FEMALE_TEXT)   : DEAD_TEXT
 
-      const name     = language === 'ar' ? (person.nameArabic || person.name) : person.name
-      const initChar = (name || '؟').charAt(0).toUpperCase()
+      const rawName  = language === 'ar' ? (person.nameArabic || person.name) : person.name
+      const name     = language === 'ar' ? tatweelName(rawName || '', 1) : (rawName || '')
+      const initChar = (rawName || '؟').charAt(0).toUpperCase()
 
       // Card shadow
       g.append('rect')
@@ -414,13 +416,13 @@ export function FamilyTreeCanvas({
               }}
             >
               {(language === 'ar'
-                ? tooltip.node.nameArabic || tooltip.node.name
+                ? (tooltip.node.nameArabic || tooltip.node.name)
                 : tooltip.node.name
               )?.charAt(0) ?? '؟'}
             </div>
             <p className="font-bold text-sm text-khartoum-900 leading-snug">
               {language === 'ar'
-                ? tooltip.node.nameArabic || tooltip.node.name
+                ? tatweelName(tooltip.node.nameArabic || tooltip.node.name || '', 2)
                 : tooltip.node.name}
             </p>
           </div>

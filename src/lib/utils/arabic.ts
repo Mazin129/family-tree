@@ -210,8 +210,55 @@ export function extractParentsFromLineage(lineage: string): {
 }
 
 // ─────────────────────────────────────────────
-// ORIGINAL UTILITIES (kept)
+// TATWEEL (KASHIDA) — Sudanese heritage display
 // ─────────────────────────────────────────────
+
+// U+0640 ARABIC TATWEEL (kashida) — stretches connected letters
+const TATWEEL = '\u0640'
+
+// Arabic letters that do NOT connect on their LEFT side.
+// Inserting tatweel AFTER these produces incorrect rendering.
+const NON_LEFT_JOINING = new Set('اأإآءوردذةىؤئ')
+
+// Matches any character in the Arabic Unicode blocks
+const IS_ARABIC = /[\u0600-\u06FF]/
+
+/**
+ * Insert tatweel (ـ) between Arabic letters for a heritage display style,
+ * e.g.  محمد → مـمـمـد  (count=1)
+ *        محمد → مـ ـحـ ـمـ ـد  (count=2)
+ *        محمد → مـ ـ ـحـ ـ ـمـ ـ ـد  (count=3)
+ *
+ * Only applied between connected letter pairs inside each word.
+ * Spaces, numbers and Latin characters are left untouched.
+ *
+ * @param text  The raw Arabic name
+ * @param count Number of tatweel chars to insert per gap (default 3)
+ */
+export function tatweelName(text: string, count = 3): string {
+  if (!text) return text
+  const pad = TATWEEL.repeat(count)
+  let result = ''
+  for (let i = 0; i < text.length; i++) {
+    const ch   = text[i]
+    const next = text[i + 1]
+    result += ch
+    // Add tatweel after ch when:
+    //   • ch is an Arabic letter that connects on the left
+    //   • next is also an Arabic letter (same word)
+    if (
+      IS_ARABIC.test(ch)   &&
+      !NON_LEFT_JOINING.has(ch) &&
+      next !== undefined   &&
+      IS_ARABIC.test(next)
+    ) {
+      result += pad
+    }
+  }
+  return result
+}
+
+
 
 /**
  * Format a Sudanese name with patronymic chain

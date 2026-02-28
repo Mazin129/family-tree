@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { User, Calendar, MapPin, Users, Edit2, Trash2, Plus, X } from 'lucide-react'
 import type { TreeMember } from '@/types'
-import { GENDER_LABELS, RELATIONSHIP_LABELS_AR } from '@/lib/utils/arabic'
+import { GENDER_LABELS, RELATIONSHIP_LABELS_AR, tatweelName } from '@/lib/utils/arabic'
 import { cn } from '@/lib/utils/cn'
 
 interface MemberCardProps {
@@ -46,7 +46,7 @@ export function MemberCard({
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
             <div>
-              <h3 className="font-bold text-khartoum-900 text-lg leading-tight">{displayName}</h3>
+              <h3 className="font-bold text-khartoum-900 text-lg leading-tight">{tatweelName(displayName)}</h3>
               {member.fullName !== member.fullNameArabic && member.fullName && (
                 <p className="text-sm text-khartoum-500">{member.fullName}</p>
               )}
