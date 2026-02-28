@@ -171,7 +171,6 @@ export function FamilyTreeCanvas({
 
       const rawName  = language === 'ar' ? (person.nameArabic || person.name) : person.name
       const name     = language === 'ar' ? tatweelName(rawName || '', 1) : (rawName || '')
-      const initChar = (rawName || '؟').charAt(0).toUpperCase()
 
       // Card shadow
       g.append('rect')
@@ -188,19 +187,6 @@ export function FamilyTreeCanvas({
         .attr('width', CW).attr('height', 7).attr('rx', CR)
         .attr('fill', accent)
 
-      // Gender icon badge (top-right)
-      const badgeX = ox + CW - 18
-      const badgeY = -CH / 2 + 18
-      g.append('circle')
-        .attr('cx', badgeX).attr('cy', badgeY).attr('r', 10)
-        .attr('fill', 'white').attr('stroke', border).attr('stroke-width', 1)
-      g.append('text')
-        .attr('x', badgeX).attr('y', badgeY + 5)
-        .attr('text-anchor', 'middle')
-        .attr('font-size', 11)
-        .text(isMale ? '♂' : (person.gender === 'FEMALE' ? '♀' : ''))
-        .attr('fill', accent)
-
       // Avatar circle (centered at top half)
       const avCY = -CH / 2 + 22 + AVR
       const avCX = ox + CW / 2
@@ -211,14 +197,19 @@ export function FamilyTreeCanvas({
         .attr('cx', avCX).attr('cy', avCY).attr('r', AVR)
         .attr('fill', avBg)
 
-      // Avatar initial
-      g.append('text')
-        .attr('x', avCX).attr('y', avCY + 9)
-        .attr('text-anchor', 'middle')
-        .attr('font-size', 26).attr('font-weight', '800')
-        .attr('font-family', "'Cairo', 'Tajawal', sans-serif")
-        .attr('fill', avFg)
-        .text(initChar)
+      // Photo in circle when available (no initial letter)
+      if (person.photo) {
+        const clipId = `avatar-clip-${(person as any).postgresId || person.id}-${ox}-${avCX}`
+        g.append('defs')
+          .append('clipPath').attr('id', clipId)
+          .append('circle').attr('cx', avCX).attr('cy', avCY).attr('r', AVR)
+        g.append('image')
+          .attr('href', person.photo)
+          .attr('x', avCX - AVR).attr('y', avCY - AVR)
+          .attr('width', AVR * 2).attr('height', AVR * 2)
+          .attr('clip-path', `url(#${clipId})`)
+          .attr('preserveAspectRatio', 'xMidYMid slice')
+      }
 
       // Name (centered, below avatar)
       const nameY = avCY + AVR + 18
@@ -253,15 +244,6 @@ export function FamilyTreeCanvas({
           .attr('font-size', 9.5).attr('font-family', "'Cairo', sans-serif")
           .attr('fill', '#92400e')
           .text(clip(person.tribe, maxChr + 2))
-      }
-
-      // Deceased overlay cross mark
-      if (!alive) {
-        g.append('text')
-          .attr('x', ox + 14).attr('y', -CH / 2 + 20)
-          .attr('text-anchor', 'middle')
-          .attr('font-size', 12).attr('fill', '#94a3b8')
-          .text('†')
       }
     }
 
