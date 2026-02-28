@@ -128,42 +128,40 @@ export const authOptions: NextAuthOptions = {
     },
 
     async signIn({ user, account }) {
-      // Auto-create privacy settings & profile for OAuth signups
+      // Run optional post-auth setup in background so callback returns quickly (avoids 503 from nginx)
       if (account?.provider === 'google' && user.id) {
-        try {
-          await prisma.privacySettings.upsert({
-            where:  { userId: user.id },
+        const userId = user.id
+        setImmediate(() => {
+          prisma.privacySettings.upsert({
+            where:  { userId },
             update: {},
-            create: {
-              userId:        user.id,
-              consentGiven:  true,
-              consentDate:   new Date(),
-            },
+            create: { userId, consentGiven: true, consentDate: new Date() },
           })
-          await prisma.userProfile.upsert({
-            where:  { userId: user.id },
-            update: {},
-            create: { userId: user.id },
-          })
-          // Only create welcome notification for brand-new users (no existing notification)
-          const existing = await prisma.notification.findFirst({
-            where: { userId: user.id, type: 'WELCOME' },
-          })
-          if (!existing) {
-            await prisma.notification.create({
-              data: {
-                userId:  user.id,
-                type:    'WELCOME',
-                title:   'Welcome to Sudanese Heritage Platform',
-                message: 'Start by creating your first family tree or exploring the community.',
-                link:    '/dashboard',
-              },
+            .then(() =>
+              prisma.userProfile.upsert({
+                where:  { userId },
+                update: {},
+                create: { userId },
+              })
+            )
+            .then(async () => {
+              const existing = await prisma.notification.findFirst({
+                where: { userId, type: 'WELCOME' },
+              })
+              if (!existing) {
+                await prisma.notification.create({
+                  data: {
+                    userId,
+                    type:    'WELCOME',
+                    title:   'Welcome to Sudanese Heritage Platform',
+                    message: 'Start by creating your first family tree or exploring the community.',
+                    link:    '/dashboard',
+                  },
+                })
+              }
             })
-          }
-        } catch (error) {
-          console.error('[Auth] signIn callback error (non-fatal):', error)
-          // Do not block sign-in due to post-auth record creation failures
-        }
+            .catch((err) => console.error('[Auth] signIn background setup (non-fatal):', err))
+        })
       }
       return true
     },
