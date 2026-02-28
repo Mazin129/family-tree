@@ -7,24 +7,26 @@ import { v4 as uuid }  from 'uuid'
 import { createPerson, createRelationship } from '@/lib/db/neo4j'
 
 const bulkMemberSchema = z.object({
-  treeId:           z.string(),
-  relativeOfId:     z.string().optional().nullable(),
-  relationshipType: z.string().optional().nullable(),
+  treeId:              z.string(),
+  relativeOfId:        z.string().optional().nullable(),
+  relationshipType:    z.string().optional().nullable(), // shared default
   // Shared fields applied to all members
-  tribe:            z.string().optional().nullable(),
-  clan:             z.string().optional().nullable(),
-  birthRegion:      z.string().optional().nullable(),
-  lineage:          z.string().optional().nullable(),
+  tribe:               z.string().optional().nullable(),
+  clan:                z.string().optional().nullable(),
+  birthRegion:         z.string().optional().nullable(),
+  lineage:             z.string().optional().nullable(),
   // Per-member data (min 1, max 20)
   members: z.array(z.object({
-    fullName:        z.string().optional().nullable(),
-    fullNameArabic:  z.string().optional().nullable(),
-    fatherName:      z.string().optional().nullable(),
-    grandfatherName: z.string().optional().nullable(),
-    gender:          z.enum(['MALE', 'FEMALE', 'UNSPECIFIED']),
-    isAlive:         z.boolean().default(true),
-    birthYear:       z.number().int().min(1600).max(new Date().getFullYear()).optional().nullable(),
-    occupation:      z.string().optional().nullable(),
+    fullName:         z.string().optional().nullable(),
+    fullNameArabic:   z.string().optional().nullable(),
+    fatherName:       z.string().optional().nullable(),
+    grandfatherName:  z.string().optional().nullable(),
+    gender:           z.enum(['MALE', 'FEMALE', 'UNSPECIFIED']),
+    isAlive:          z.boolean().default(true),
+    birthYear:        z.number().int().min(1600).max(new Date().getFullYear()).optional().nullable(),
+    occupation:       z.string().optional().nullable(),
+    // Per-member relationship override — overrides the shared `relationshipType`
+    relationshipType: z.string().optional().nullable(),
   })).min(1).max(20),
 })
 
@@ -51,18 +53,18 @@ export async function POST(req: NextRequest) {
     })
     if (!tree) return NextResponse.json({ success: false, error: 'غير مصرّح أو الشجرة غير موجودة' }, { status: 403 })
 
-    // Resolve relative upfront (single DB call)
-    let relativeNeo4jId: string | null = null
+    // Resolve anchor member (used by all rows that don't override relativeOfId)
+    let relativeNeo4jId:    string | null = null
     let relativePostgresId: string | null = null
-    if (data.relativeOfId && data.relationshipType) {
+    if (data.relativeOfId) {
       const relative = await prisma.treeMember.findUnique({ where: { id: data.relativeOfId } })
       if (relative) {
-        relativeNeo4jId   = relative.neo4jPersonId
+        relativeNeo4jId    = relative.neo4jPersonId
         relativePostgresId = relative.id
       }
     }
 
-    // Create all members in parallel
+    // Create all members sequentially to keep relationship logic correct
     const createdMembers = await Promise.all(
       data.members.map(async (m) => {
         const neo4jPersonId = `person-${uuid()}`
@@ -99,20 +101,62 @@ export async function POST(req: NextRequest) {
           tribe:          data.tribe || null,
         }).catch(err => console.warn('Neo4j createPerson failed:', err.message))
 
-        // Relationship — corrected direction, non-blocking
-        if (relativeNeo4jId && data.relationshipType) {
-          const relType = data.relationshipType
+        // Resolve per-member relationship type (falls back to shared default)
+        const relType = m.relationshipType ?? data.relationshipType
+
+        if (relativePostgresId && relativeNeo4jId && relType) {
+          // ── PostgreSQL relationship (primary store) ───────────────────────
           if (relType === 'CHILD_OF') {
-            // new member is child of existing → existing -PARENT_OF-> new
-            createRelationship(relativeNeo4jId, neo4jPersonId, 'PARENT_OF')
-              .catch(err => console.warn('Neo4j createRelationship failed:', err.message))
+            // new member IS a child of the anchor → anchor -PARENT_OF-> new
+            await prisma.memberRelationship.upsert({
+              where: {
+                fromMemberId_toMemberId_type: {
+                  fromMemberId: relativePostgresId,
+                  toMemberId:   member.id,
+                  type:         'PARENT_OF',
+                },
+              },
+              create: { fromMemberId: relativePostgresId, toMemberId: member.id, type: 'PARENT_OF' },
+              update: {},
+            })
           } else if (relType === 'PARENT_OF') {
-            // new member is parent of existing → new -PARENT_OF-> existing
+            // new member IS a parent of the anchor → new -PARENT_OF-> anchor
+            await prisma.memberRelationship.upsert({
+              where: {
+                fromMemberId_toMemberId_type: {
+                  fromMemberId: member.id,
+                  toMemberId:   relativePostgresId,
+                  type:         'PARENT_OF',
+                },
+              },
+              create: { fromMemberId: member.id, toMemberId: relativePostgresId, type: 'PARENT_OF' },
+              update: {},
+            })
+          } else {
+            // SPOUSE_OF, SIBLING_OF, HALF_SIBLING_OF, etc.
+            await prisma.memberRelationship.upsert({
+              where: {
+                fromMemberId_toMemberId_type: {
+                  fromMemberId: relativePostgresId,
+                  toMemberId:   member.id,
+                  type:         relType,
+                },
+              },
+              create: { fromMemberId: relativePostgresId, toMemberId: member.id, type: relType },
+              update: {},
+            })
+          }
+
+          // ── Neo4j mirror (non-blocking) ───────────────────────────────────
+          if (relType === 'CHILD_OF') {
+            createRelationship(relativeNeo4jId, neo4jPersonId, 'PARENT_OF')
+              .catch(err => console.warn('Neo4j rel failed:', err.message))
+          } else if (relType === 'PARENT_OF') {
             createRelationship(neo4jPersonId, relativeNeo4jId, 'PARENT_OF')
-              .catch(err => console.warn('Neo4j createRelationship failed:', err.message))
+              .catch(err => console.warn('Neo4j rel failed:', err.message))
           } else {
             createRelationship(relativeNeo4jId, neo4jPersonId, relType as any)
-              .catch(err => console.warn('Neo4j createRelationship failed:', err.message))
+              .catch(err => console.warn('Neo4j rel failed:', err.message))
           }
         }
 
@@ -120,7 +164,7 @@ export async function POST(req: NextRequest) {
       })
     )
 
-    // Update tree's updatedAt timestamp
+    // Update tree timestamp
     await prisma.familyTree.update({
       where: { id: data.treeId },
       data:  { updatedAt: new Date() },

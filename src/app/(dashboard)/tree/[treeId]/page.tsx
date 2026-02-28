@@ -258,6 +258,7 @@ export default function TreeViewPage() {
         <BulkAddMembersModal
           treeId={treeId}
           relativeOf={addRelativeTo || undefined}
+          existingMembers={members}
           onSuccess={() => { fetchTree(); setAddRelativeTo(null) }}
           onClose={() => { setShowBulkModal(false); setAddRelativeTo(null) }}
         />
