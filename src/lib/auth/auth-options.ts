@@ -121,29 +121,40 @@ export const authOptions: NextAuthOptions = {
     async signIn({ user, account }) {
       // Auto-create privacy settings & profile for OAuth signups
       if (account?.provider === 'google' && user.id) {
-        await prisma.privacySettings.upsert({
-          where:  { userId: user.id },
-          update: {},
-          create: {
-            userId:        user.id,
-            consentGiven:  true,
-            consentDate:   new Date(),
-          },
-        })
-        await prisma.userProfile.upsert({
-          where:  { userId: user.id },
-          update: {},
-          create: { userId: user.id },
-        })
-        await prisma.notification.create({
-          data: {
-            userId:  user.id,
-            type:    'WELCOME',
-            title:   'Welcome to Sudanese Heritage Platform',
-            message: 'Start by creating your first family tree or exploring the community.',
-            link:    '/dashboard',
-          },
-        })
+        try {
+          await prisma.privacySettings.upsert({
+            where:  { userId: user.id },
+            update: {},
+            create: {
+              userId:        user.id,
+              consentGiven:  true,
+              consentDate:   new Date(),
+            },
+          })
+          await prisma.userProfile.upsert({
+            where:  { userId: user.id },
+            update: {},
+            create: { userId: user.id },
+          })
+          // Only create welcome notification for brand-new users (no existing notification)
+          const existing = await prisma.notification.findFirst({
+            where: { userId: user.id, type: 'WELCOME' },
+          })
+          if (!existing) {
+            await prisma.notification.create({
+              data: {
+                userId:  user.id,
+                type:    'WELCOME',
+                title:   'Welcome to Sudanese Heritage Platform',
+                message: 'Start by creating your first family tree or exploring the community.',
+                link:    '/dashboard',
+              },
+            })
+          }
+        } catch (error) {
+          console.error('[Auth] signIn callback error (non-fatal):', error)
+          // Do not block sign-in due to post-auth record creation failures
+        }
       }
       return true
     },
