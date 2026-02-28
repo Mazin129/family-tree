@@ -28,9 +28,17 @@ export const GOOGLE_OAUTH_ENABLED = googleConfigured
 //   {NEXTAUTH_URL}/api/auth/callback/google
 // e.g. https://sudandna.com/api/auth/callback/google
 
+// Keep users logged in for 30 days (Gmail and credentials)
+const THIRTY_DAYS_SECONDS = 30 * 24 * 60 * 60
+const ONE_DAY_SECONDS = 24 * 60 * 60
+
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma) as any,
-  session: { strategy: 'jwt' },
+  session: {
+    strategy: 'jwt',
+    maxAge:   THIRTY_DAYS_SECONDS,   // 30 days
+    updateAge: ONE_DAY_SECONDS,      // refresh session every 24h when used
+  },
   pages: {
     signIn:  '/login',
     signOut: '/login',
