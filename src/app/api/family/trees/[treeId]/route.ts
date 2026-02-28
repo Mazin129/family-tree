@@ -202,9 +202,28 @@ async function buildFlatVisualization(treeId: string) {
 
   // Root candidates: members with no parent recorded
   const roots = members.filter(m => !hasParentSet.has(m.id))
-  // If multiple roots, pick the one born earliest (oldest ancestor), else first created
-  roots.sort((a, b) => (a.birthYear ?? 9999) - (b.birthYear ?? 9999))
-  const rootMember = roots[0]
+  if (roots.length === 0) return null
+
+  // Count nodes reachable from each root (self + descendants + spouses)
+  function countSubtree(id: string, visited = new Set<string>()): number {
+    if (visited.has(id)) return 0
+    visited.add(id)
+    let n = 1
+    for (const cid of childMap.get(id) ?? []) n += countSubtree(cid, visited)
+    for (const sid of spouseMap.get(id) ?? []) n += countSubtree(sid, visited)
+    return n
+  }
+  // Pick the root with the largest subtree so adding an older ancestor (e.g. deceased father)
+  // doesn't collapse the view to just 2 people
+  let rootMember = roots[0]
+  let maxCount = countSubtree(rootMember.id)
+  for (let i = 1; i < roots.length; i++) {
+    const count = countSubtree(roots[i].id)
+    if (count > maxCount) {
+      maxCount = count
+      rootMember = roots[i]
+    }
+  }
 
   function toNode(id: string, visited = new Set<string>()): object | null {
     if (visited.has(id)) return null
