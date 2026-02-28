@@ -32,6 +32,7 @@ export default function TreeViewPage() {
   const [showBulkModal,  setShowBulkModal]  = useState(false)
   const [showShareModal, setShowShareModal] = useState(false)
   const [addRelativeTo,  setAddRelativeTo]  = useState<TreeMember | null>(null)
+  const [addParentHint,  setAddParentHint]  = useState<'father' | 'mother' | null>(null)
   const [activeTab,      setActiveTab]      = useState<Tab>('tree')
   const [loading,        setLoading]        = useState(true)
 
@@ -52,6 +53,20 @@ export default function TreeViewPage() {
   }, [treeId])
 
   useEffect(() => { fetchTree() }, [fetchTree])
+
+  function findNodeInTree(node: TreeNode | null | undefined, postgresId: string): TreeNode | null {
+    if (!node) return null
+    if (node.postgresId === postgresId || node.id === postgresId) return node
+    for (const c of node.children ?? []) {
+      const found = findNodeInTree(c, postgresId)
+      if (found) return found
+    }
+    for (const s of node.spouses ?? []) {
+      const found = findNodeInTree(s, postgresId)
+      if (found) return found
+    }
+    return null
+  }
 
   function handleNodeClick(node: TreeNode) {
     const member = members.find(m => m.id === node.postgresId || m.neo4jPersonId === node.id)
@@ -247,6 +262,15 @@ export default function TreeViewPage() {
                 onDelete={handleDeleteMember}
                 onAddRelative={(member) => { setAddRelativeTo(member); setShowAddModal(true) }}
                 onBulkAdd={(member) => { setAddRelativeTo(member); setShowBulkModal(true) }}
+                showAddSpousePrompt={
+                  (() => {
+                    const node = findNodeInTree(treeData, selectedMember.id)
+                    const hasChildren = (node?.children?.length ?? 0) > 0
+                    const hasSpouse = (node?.spouses?.length ?? 0) > 0
+                    return hasChildren && !hasSpouse
+                  })()
+                }
+                onAddSpouse={(member) => { setAddRelativeTo(member); setShowAddModal(true) }}
               />
             </div>
           </div>
@@ -258,13 +282,20 @@ export default function TreeViewPage() {
         <AddMemberModal
           treeId={treeId}
           relativeOf={addRelativeTo || undefined}
+          addParentHint={addParentHint ?? undefined}
           onSuccess={(member) => {
             fetchTree()
             setAddRelativeTo(null)
+            setAddParentHint(null)
             setSelectedMember(member)
             setShowEditModal(true)
           }}
-          onClose={() => { setShowAddModal(false); setAddRelativeTo(null) }}
+          onClose={() => { setShowAddModal(false); setAddRelativeTo(null); setAddParentHint(null) }}
+          onAddParent={(member, type) => {
+            setAddRelativeTo(member)
+            setAddParentHint(type)
+            setShowAddModal(true)
+          }}
         />
       )}
 

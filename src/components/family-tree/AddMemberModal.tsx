@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -55,8 +55,10 @@ type MemberForm = z.infer<typeof memberSchema>
 interface AddMemberModalProps {
   treeId:         string
   relativeOf?:    TreeMember   // If adding relative of an existing member
+  addParentHint?: 'father' | 'mother'  // Pre-fill relationship when adding parent (optional)
   onSuccess:      (member: TreeMember) => void
   onClose:        () => void
+  onAddParent?:   (member: TreeMember, type: 'father' | 'mother') => void  // Optional: reopen to add parent
 }
 
 // Spouse first for clarity (e.g. Muslim multiple wives); system allows multiple SPOUSE_OF per person
@@ -70,8 +72,11 @@ const RELATIONSHIP_OPTIONS: { value: RelationshipType; label: string }[] = [
   { value: 'EXTENDED_KIN',     label: 'قريب آخر' },
 ]
 
-export function AddMemberModal({ treeId, relativeOf, onSuccess, onClose }: AddMemberModalProps) {
-  const [step, setStep] = useState<'basic' | 'details' | 'confirm'>(relativeOf ? 'basic' : 'basic')
+export function AddMemberModal({ treeId, relativeOf, addParentHint, onSuccess, onClose, onAddParent }: AddMemberModalProps) {
+  const [step, setStep] = useState<'basic' | 'details' | 'confirm' | 'addParentsOptional'>(
+    relativeOf ? 'basic' : 'basic'
+  )
+  const [createdMember, setCreatedMember] = useState<TreeMember | null>(null)
 
   const {
     register,
@@ -82,11 +87,20 @@ export function AddMemberModal({ treeId, relativeOf, onSuccess, onClose }: AddMe
   } = useForm<MemberForm>({
     resolver: zodResolver(memberSchema),
     defaultValues: {
-      gender:  'MALE',
-      isAlive: true,
-      tribe:   relativeOf?.tribe || '',
+      gender:           'MALE',
+      isAlive:          true,
+      tribe:             relativeOf?.tribe || '',
+      relationshipType:  addParentHint === 'father' ? 'PARENT_OF' : addParentHint === 'mother' ? 'PARENT_OF' : undefined,
     },
   })
+
+  // Pre-fill parent type when opening to add father/mother (optional)
+  useEffect(() => {
+    if (relativeOf && addParentHint) {
+      setValue('relationshipType', 'PARENT_OF')
+      setValue('gender', addParentHint === 'father' ? 'MALE' : 'FEMALE')
+    }
+  }, [relativeOf, addParentHint, setValue])
 
   const isAlive  = watch('isAlive')
   const lineage  = watch('lineage')
@@ -128,11 +142,61 @@ export function AddMemberModal({ treeId, relativeOf, onSuccess, onClose }: AddMe
       if (!json.success) throw new Error(json.error)
 
       toast.success('تم إضافة الفرد بنجاح')
-      onSuccess(json.data)
-      onClose()
+      if (relativeOf) {
+        onSuccess(json.data)
+        onClose()
+      } else {
+        setCreatedMember(json.data)
+        setStep('addParentsOptional')
+      }
     } catch (err: any) {
       toast.error(err.message || 'حدث خطأ أثناء الإضافة')
     }
+  }
+
+  // Optional step after creating a person: add father / mother (not mandatory)
+  if (step === 'addParentsOptional' && createdMember) {
+    const name = createdMember.fullNameArabic || createdMember.fullName
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" dir="rtl">
+        <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden animate-slide-up p-6">
+          <h2 className="font-bold text-khartoum-900 text-lg mb-1">إضافة والدين؟</h2>
+          <p className="text-sm text-khartoum-500 mb-6">اختياري — يمكنك تخطي هذا أو إضافة الأب أو الأم لـ {name}</p>
+          <div className="flex flex-col gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                onSuccess(createdMember)
+                onClose()
+              }}
+              className="btn-secondary w-full py-3"
+            >
+              تخطي
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                onClose()
+                setTimeout(() => onAddParent?.(createdMember, 'father'), 0)
+              }}
+              className="btn-primary w-full py-3"
+            >
+              إضافة أب
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                onClose()
+                setTimeout(() => onAddParent?.(createdMember, 'mother'), 0)
+              }}
+              className="btn-primary w-full py-3"
+            >
+              إضافة أم
+            </button>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (

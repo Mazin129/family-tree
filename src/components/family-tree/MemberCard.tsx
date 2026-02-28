@@ -12,6 +12,9 @@ interface MemberCardProps {
   onDelete?:   (memberId: string) => void
   onAddRelative?: (member: TreeMember) => void
   onBulkAdd?:  (member: TreeMember) => void
+  /** When true, show optional "Add spouse?" (e.g. when person has children but no spouse) */
+  showAddSpousePrompt?: boolean
+  onAddSpouse?: (member: TreeMember) => void
   readOnly?: boolean
 }
 
@@ -21,6 +24,8 @@ export function MemberCard({
   onDelete,
   onAddRelative,
   onBulkAdd,
+  showAddSpousePrompt = false,
+  onAddSpouse,
   readOnly = false,
 }: MemberCardProps) {
   const [showConfirmDelete, setShowConfirmDelete] = useState(false)
@@ -108,6 +113,20 @@ export function MemberCard({
           <p className="text-sm text-khartoum-700 leading-relaxed">
             {member.bioArabic || member.bio}
           </p>
+        </div>
+      )}
+
+      {/* Optional: add spouse when person has children (not mandatory) */}
+      {!readOnly && showAddSpousePrompt && onAddSpouse && (
+        <div className="mb-4 p-3 rounded-xl bg-sand-50 border border-sand-200">
+          <p className="text-xs text-khartoum-500 mb-2">لديه أبناء — إضافة زوج/زوجة اختياري</p>
+          <button
+            type="button"
+            onClick={() => onAddSpouse(member)}
+            className="text-sm text-sand-600 hover:text-sand-800 font-medium"
+          >
+            إضافة زوج/زوجة
+          </button>
         </div>
       )}
 
