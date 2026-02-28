@@ -288,7 +288,6 @@ export default function TreeViewPage() {
             setAddRelativeTo(null)
             setAddParentHint(null)
             setSelectedMember(member)
-            setShowEditModal(true)
           }}
           onClose={() => { setShowAddModal(false); setAddRelativeTo(null); setAddParentHint(null) }}
           onAddParent={(member, type) => {
