@@ -136,6 +136,13 @@ export async function POST(req: NextRequest) {
         if (relType === 'CHILD_OF') {
           // UI label "ابن/ابنة": new person IS a child of the existing person
           // → existing -PARENT_OF-> new
+          // Save to PostgreSQL (primary store)
+          await prisma.memberRelationship.upsert({
+            where: { fromMemberId_toMemberId_type: { fromMemberId: relative.id, toMemberId: member.id, type: 'PARENT_OF' } },
+            create: { fromMemberId: relative.id, toMemberId: member.id, type: 'PARENT_OF' },
+            update: {},
+          })
+          // Mirror to Neo4j (best-effort)
           createRelationship(relative.neo4jPersonId, neo4jPersonId, 'PARENT_OF')
             .catch(err => console.warn('Neo4j relationship creation failed:', err.message))
 
@@ -153,40 +160,42 @@ export async function POST(req: NextRequest) {
             )
           }
 
-          // Validate: existing member must not already have a parent of same gender
-          try {
-            const existingParents = await countParentsByGender(relative.neo4jPersonId, data.gender)
-            if (existingParents >= 1) {
-              await prisma.treeMember.delete({ where: { id: member.id } })
-              const genderLabel = data.gender === 'MALE' ? 'والد' : data.gender === 'FEMALE' ? 'والدة' : 'والد/والدة'
-              return NextResponse.json(
-                { success: false, error: `${relative.fullNameArabic || relative.fullName} لديه بالفعل ${genderLabel} مسجّل` },
-                { status: 422 }
-              )
-            }
-          } catch {
-            // Neo4j unavailable — skip validation, create anyway
+          // Validate: existing member must not already have a parent of same gender (Postgres)
+          const pgParentCount = await prisma.memberRelationship.count({
+            where: {
+              toMemberId: relative.id,
+              type: 'PARENT_OF',
+              fromMember: { gender: data.gender as any },
+            },
+          })
+          if (pgParentCount >= 1) {
+            await prisma.treeMember.delete({ where: { id: member.id } })
+            const genderLabel = data.gender === 'MALE' ? 'والد' : data.gender === 'FEMALE' ? 'والدة' : 'والد/والدة'
+            return NextResponse.json(
+              { success: false, error: `${relative.fullNameArabic || relative.fullName} لديه بالفعل ${genderLabel} مسجّل` },
+              { status: 422 }
+            )
           }
 
-          // Validate: no circular relationships (Task 3)
-          try {
-            const cycle = await wouldCreateCycle(neo4jPersonId, relative.neo4jPersonId)
-            if (cycle) {
-              await prisma.treeMember.delete({ where: { id: member.id } })
-              return NextResponse.json(
-                { success: false, error: 'هذه العلاقة ستنشئ حلقة دائرية في شجرة العائلة' },
-                { status: 422 }
-              )
-            }
-          } catch {
-            // Neo4j unavailable — skip validation
-          }
-
+          // Save to PostgreSQL (primary store)
+          await prisma.memberRelationship.upsert({
+            where: { fromMemberId_toMemberId_type: { fromMemberId: member.id, toMemberId: relative.id, type: 'PARENT_OF' } },
+            create: { fromMemberId: member.id, toMemberId: relative.id, type: 'PARENT_OF' },
+            update: {},
+          })
+          // Mirror to Neo4j (best-effort)
           createRelationship(neo4jPersonId, relative.neo4jPersonId, 'PARENT_OF')
             .catch(err => console.warn('Neo4j relationship creation failed:', err.message))
 
         } else {
           // SPOUSE_OF, SIBLING_OF, HALF_SIBLING_OF, etc. — direction unchanged
+          // Save to PostgreSQL (primary store)
+          await prisma.memberRelationship.upsert({
+            where: { fromMemberId_toMemberId_type: { fromMemberId: relative.id, toMemberId: member.id, type: relType } },
+            create: { fromMemberId: relative.id, toMemberId: member.id, type: relType },
+            update: {},
+          })
+          // Mirror to Neo4j (best-effort)
           createRelationship(relative.neo4jPersonId, neo4jPersonId, relType as any)
             .catch(err => console.warn('Neo4j relationship creation failed:', err.message))
         }

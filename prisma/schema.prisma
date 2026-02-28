@@ -133,6 +133,21 @@ model FamilyTree {
   @@index([ownerId])
 }
 
+model MemberRelationship {
+  id           String   @id @default(cuid())
+  fromMemberId String
+  toMemberId   String
+  type         String   // PARENT_OF | SPOUSE_OF | SIBLING_OF | HALF_SIBLING_OF | ADOPTED_CHILD_OF | GUARDIAN_OF | EXTENDED_KIN
+  createdAt    DateTime @default(now())
+
+  fromMember TreeMember @relation("RelationshipFrom", fields: [fromMemberId], references: [id], onDelete: Cascade)
+  toMember   TreeMember @relation("RelationshipTo",   fields: [toMemberId],   references: [id], onDelete: Cascade)
+
+  @@unique([fromMemberId, toMemberId, type])
+  @@index([fromMemberId])
+  @@index([toMemberId])
+}
+
 model TreeMember {
   id              String          @id @default(cuid())
   treeId          String
@@ -175,8 +190,10 @@ model TreeMember {
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
-  tree   FamilyTree @relation(fields: [treeId], references: [id], onDelete: Cascade)
-  user   User?      @relation(fields: [userId], references: [id])
+  tree              FamilyTree           @relation(fields: [treeId], references: [id], onDelete: Cascade)
+  user              User?                @relation(fields: [userId], references: [id])
+  relationshipsFrom MemberRelationship[] @relation("RelationshipFrom")
+  relationshipsTo   MemberRelationship[] @relation("RelationshipTo")
 
   @@index([treeId])
   @@index([neo4jPersonId])

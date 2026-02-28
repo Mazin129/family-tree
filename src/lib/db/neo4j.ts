@@ -161,14 +161,31 @@ export async function getTreeForVisualization(
   rootPostgresId: string,
   maxDepth: number = 6
 ): Promise<TreeNode | null> {
+  // Walk BOTH directions: ancestors above root and descendants below.
+  // We collect all nodes reachable via PARENT_OF/SPOUSE_OF/SIBLING_OF in either direction.
   const records = await runQuery<{
     nodes: GraphPerson[]
     relationships: { type: string; start: string; end: string }[]
   }>(
-    `MATCH path = (root:Person {postgresId: $rootId})-[*0..${maxDepth}]->(descendant:Person)
-     WITH collect(DISTINCT nodes(path)) AS allNodes,
-          collect(DISTINCT relationships(path)) AS allRels
-     RETURN allNodes, allRels`,
+    `// Find oldest ancestor up to maxDepth levels above root
+     MATCH (root:Person {postgresId: $rootId})
+     OPTIONAL MATCH ancestorPath = (ancestor:Person)-[:PARENT_OF*1..${maxDepth}]->(root)
+     WITH root, collect(DISTINCT nodes(ancestorPath)) AS ancNodes,
+               collect(DISTINCT relationships(ancestorPath)) AS ancRels
+     // Find all descendants of root (and ancestors) going downward
+     OPTIONAL MATCH descPath = (root)-[:PARENT_OF*0..${maxDepth}]->(descendant:Person)
+     WITH root, ancNodes, ancRels,
+          collect(DISTINCT nodes(descPath)) AS descNodes,
+          collect(DISTINCT relationships(descPath)) AS descRels
+     // Flatten both node sets and rel sets
+     WITH ancNodes + descNodes AS allNodeLists,
+          ancRels  + descRels  AS allRelLists
+     UNWIND allNodeLists AS nodeList
+     UNWIND nodeList AS n
+     WITH collect(DISTINCT n) AS allNodes, allRelLists
+     UNWIND allRelLists AS relList
+     UNWIND relList AS r
+     RETURN allNodes AS nodes, collect(DISTINCT {type: type(r), start: startNode(r).postgresId, end: endNode(r).postgresId}) AS relationships`,
     { rootId: rootPostgresId }
   )
 

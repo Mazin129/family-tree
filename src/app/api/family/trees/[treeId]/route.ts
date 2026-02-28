@@ -39,22 +39,23 @@ export async function GET(
       return NextResponse.json({ success: false, error: 'الشجرة غير موجودة' }, { status: 404 })
     }
 
-    // Get root member for visualization
-    const rootMember = await prisma.treeMember.findFirst({
-      where: { treeId, userId },
-    }) || await prisma.treeMember.findFirst({ where: { treeId } })
+    // Build visualization from PostgreSQL relationships (primary source).
+    // Neo4j is used as a supplement only if Postgres yields no relationships.
+    let visualization = await buildFlatVisualization(treeId)
 
-    // Get visualization data from Neo4j (if available)
-    let visualization = null
-    if (rootMember?.neo4jPersonId) {
-      try {
-        visualization = await getTreeForVisualization(rootMember.neo4jPersonId)
-      } catch {
-        // Neo4j not available, use fallback flat structure
-        visualization = await buildFlatVisualization(treeId)
+    // If Postgres has only one node with no relationships, try Neo4j as fallback
+    if (visualization && !(visualization as any).children?.length) {
+      const rootMember = await prisma.treeMember.findFirst({ where: { treeId } })
+      if (rootMember?.neo4jPersonId) {
+        try {
+          const neo4jViz = await getTreeForVisualization(rootMember.neo4jPersonId)
+          if (neo4jViz && ((neo4jViz.children?.length ?? 0) > 0)) {
+            visualization = neo4jViz
+          }
+        } catch {
+          // Neo4j not available — keep Postgres result
+        }
       }
-    } else {
-      visualization = await buildFlatVisualization(treeId)
     }
 
     return NextResponse.json({ success: true, data: { tree, visualization } })
@@ -89,28 +90,108 @@ export async function DELETE(
   }
 }
 
-// Helper: fallback visualization when Neo4j is unavailable.
-// Returns only the root node — better to show one correct node than fake relationships.
+// Build full visualization from PostgreSQL relationships.
+// Finds the oldest ancestor (no parent in tree) as root, then builds downward.
 async function buildFlatVisualization(treeId: string) {
-  const root = await prisma.treeMember.findFirst({
+  const members = await prisma.treeMember.findMany({
     where:   { treeId },
     orderBy: { createdAt: 'asc' },
   })
-  if (!root) return null
+  if (!members.length) return null
 
-  return {
-    id:           root.id,
-    name:         root.fullName,
-    nameArabic:   root.fullNameArabic,
-    gender:       root.gender,
-    birthYear:    root.birthYear,
-    deathYear:    root.deathYear,
-    isAlive:      root.isAlive,
-    photo:        root.photo,
-    tribe:        root.tribe,
-    privacyLevel: root.privacyLevel,
-    postgresId:   root.id,
-    children:     [],
-    spouses:      [],
+  // Fetch all relationships between members of this tree
+  const memberIds = members.map(m => m.id)
+  const relationships = await prisma.memberRelationship.findMany({
+    where: { fromMemberId: { in: memberIds } },
+  })
+
+  // Build lookup maps
+  const memberById = new Map(members.map(m => [m.id, m]))
+
+  // childMap: parentId → [childId, ...]   (PARENT_OF edges)
+  const childMap   = new Map<string, string[]>()
+  // spouseMap: personId → [spouseId, ...]  (SPOUSE_OF edges, bidirectional)
+  const spouseMap  = new Map<string, string[]>()
+  // siblingMap: personId → Set<siblingId>  (SIBLING_OF edges)
+  const siblingMap = new Map<string, Set<string>>()
+
+  for (const rel of relationships) {
+    if (!memberIds.includes(rel.toMemberId)) continue  // skip cross-tree refs
+
+    if (rel.type === 'PARENT_OF') {
+      const kids = childMap.get(rel.fromMemberId) ?? []
+      if (!kids.includes(rel.toMemberId)) kids.push(rel.toMemberId)
+      childMap.set(rel.fromMemberId, kids)
+    } else if (rel.type === 'SPOUSE_OF') {
+      const a = spouseMap.get(rel.fromMemberId) ?? []
+      if (!a.includes(rel.toMemberId)) a.push(rel.toMemberId)
+      spouseMap.set(rel.fromMemberId, a)
+      const b = spouseMap.get(rel.toMemberId) ?? []
+      if (!b.includes(rel.fromMemberId)) b.push(rel.fromMemberId)
+      spouseMap.set(rel.toMemberId, b)
+    } else if (rel.type === 'SIBLING_OF' || rel.type === 'HALF_SIBLING_OF') {
+      if (!siblingMap.has(rel.fromMemberId)) siblingMap.set(rel.fromMemberId, new Set())
+      if (!siblingMap.has(rel.toMemberId))   siblingMap.set(rel.toMemberId, new Set())
+      siblingMap.get(rel.fromMemberId)!.add(rel.toMemberId)
+      siblingMap.get(rel.toMemberId)!.add(rel.fromMemberId)
+    }
   }
+
+  // Siblings with no parent: attach them under their sibling's parent
+  for (const [personId, siblings] of siblingMap) {
+    const alreadyHasParent = [...childMap.values()].some(kids => kids.includes(personId))
+    if (alreadyHasParent) continue
+    for (const sibId of siblings) {
+      for (const [parentId, kids] of childMap) {
+        if (kids.includes(sibId) && !kids.includes(personId)) {
+          kids.push(personId)
+          break
+        }
+      }
+    }
+  }
+
+  // IDs that appear as children (have a parent in this tree)
+  const hasParentSet = new Set<string>()
+  for (const kids of childMap.values()) {
+    for (const kid of kids) hasParentSet.add(kid)
+  }
+
+  // Root candidates: members with no parent recorded
+  const roots = members.filter(m => !hasParentSet.has(m.id))
+  // If multiple roots, pick the one born earliest (oldest ancestor), else first created
+  roots.sort((a, b) => (a.birthYear ?? 9999) - (b.birthYear ?? 9999))
+  const rootMember = roots[0]
+
+  function toNode(id: string, visited = new Set<string>()): object | null {
+    if (visited.has(id)) return null
+    visited.add(id)
+    const m = memberById.get(id)
+    if (!m) return null
+
+    const childIds  = childMap.get(id)  ?? []
+    const spouseIds = spouseMap.get(id) ?? []
+
+    return {
+      id:           m.id,
+      name:         m.fullName,
+      nameArabic:   m.fullNameArabic,
+      gender:       m.gender,
+      birthYear:    m.birthYear,
+      deathYear:    m.deathYear,
+      isAlive:      m.isAlive,
+      photo:        m.photo,
+      tribe:        m.tribe,
+      privacyLevel: m.privacyLevel,
+      postgresId:   m.id,
+      children: childIds
+        .map(cid => toNode(cid, new Set(visited)))
+        .filter(Boolean),
+      spouses: spouseIds
+        .map(sid => toNode(sid, new Set(visited)))
+        .filter(Boolean),
+    }
+  }
+
+  return toNode(rootMember.id)
 }
