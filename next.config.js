@@ -7,7 +7,7 @@ const nextConfig = {
   },
   output: 'standalone',
   experimental: {
-    serverComponentsExternalPackages: ['neo4j-driver'],
+    serverComponentsExternalPackages: ['neo4j-driver', 'https-proxy-agent'],
   },
   images: {
     remotePatterns: [
