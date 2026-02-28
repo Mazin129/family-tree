@@ -14,6 +14,11 @@ module.exports = {
       autorestart: true,
       watch: false,
       max_memory_restart: '1G',
+      // Prevent PM2 from giving up after rapid successive crashes:
+      // wait at least 10 s of uptime before marking the process "stable"
+      min_uptime: '10s',
+      // Exponential backoff on restarts (100ms → 200 → 400 → … up to 16 s)
+      exp_backoff_restart_delay: 100,
       env: {
         NODE_ENV: 'production',
         PORT: 3000,
