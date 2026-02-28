@@ -1,16 +1,17 @@
 'use client'
 
 import { useState } from 'react'
-import { User, Calendar, MapPin, Users, Edit2, Trash2, Plus, X } from 'lucide-react'
+import { User, Calendar, MapPin, Users, Edit2, Trash2, Plus, X, UsersRound } from 'lucide-react'
 import type { TreeMember } from '@/types'
 import { GENDER_LABELS, RELATIONSHIP_LABELS_AR, tatweelName } from '@/lib/utils/arabic'
 import { cn } from '@/lib/utils/cn'
 
 interface MemberCardProps {
   member: TreeMember
-  onEdit?:   (member: TreeMember) => void
-  onDelete?: (memberId: string) => void
+  onEdit?:      (member: TreeMember) => void
+  onDelete?:   (memberId: string) => void
   onAddRelative?: (member: TreeMember) => void
+  onBulkAdd?:  (member: TreeMember) => void
   readOnly?: boolean
 }
 
@@ -19,6 +20,7 @@ export function MemberCard({
   onEdit,
   onDelete,
   onAddRelative,
+  onBulkAdd,
   readOnly = false,
 }: MemberCardProps) {
   const [showConfirmDelete, setShowConfirmDelete] = useState(false)
@@ -111,19 +113,29 @@ export function MemberCard({
 
       {/* Actions */}
       {!readOnly && (
-        <div className="flex gap-2 pt-3 border-t border-sand-100">
+        <div className="flex flex-wrap gap-2 pt-3 border-t border-sand-100">
           {!showConfirmDelete ? (
             <>
               <button
                 onClick={() => onAddRelative?.(member)}
-                className="btn-primary flex-1 text-sm py-2"
+                className="btn-primary flex-1 min-w-0 text-sm py-2"
               >
                 <Plus className="w-4 h-4" />
                 إضافة قريب
               </button>
+              {onBulkAdd && (
+                <button
+                  onClick={() => onBulkAdd(member)}
+                  className="btn-secondary px-3 py-2"
+                  title="إضافة متعددة"
+                >
+                  <UsersRound className="w-4 h-4" />
+                </button>
+              )}
               <button
                 onClick={() => onEdit?.(member)}
                 className="btn-secondary px-3 py-2"
+                title="تعديل"
               >
                 <Edit2 className="w-4 h-4" />
               </button>

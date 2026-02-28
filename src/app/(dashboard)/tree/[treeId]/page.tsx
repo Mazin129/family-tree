@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation'
 import { FamilyTreeCanvas }  from '@/components/family-tree/FamilyTreeCanvas'
 import { MemberCard }        from '@/components/family-tree/MemberCard'
 import { AddMemberModal }     from '@/components/family-tree/AddMemberModal'
+import { EditMemberModal }    from '@/components/family-tree/EditMemberModal'
 import { BulkAddMembersModal } from '@/components/family-tree/BulkAddMembersModal'
 import { ShareModal }        from '@/components/family-tree/ShareModal'
 import { AIInsightsPanel }   from '@/components/ai/AIInsightsPanel'
@@ -27,6 +28,7 @@ export default function TreeViewPage() {
   const [members,        setMembers]       = useState<TreeMember[]>([])
   const [selectedMember, setSelectedMember] = useState<TreeMember | null>(null)
   const [showAddModal,   setShowAddModal]  = useState(false)
+  const [showEditModal,  setShowEditModal] = useState(false)
   const [showBulkModal,  setShowBulkModal]  = useState(false)
   const [showShareModal, setShowShareModal] = useState(false)
   const [addRelativeTo,  setAddRelativeTo]  = useState<TreeMember | null>(null)
@@ -202,9 +204,10 @@ export default function TreeViewPage() {
                     <MemberCard
                       key={m.id}
                       member={m}
-                      onEdit={() => setSelectedMember(m)}
+                      onEdit={() => { setSelectedMember(m); setShowEditModal(true) }}
                       onDelete={handleDeleteMember}
                       onAddRelative={(member) => { setAddRelativeTo(member); setShowAddModal(true) }}
+                      onBulkAdd={(member) => { setAddRelativeTo(member); setShowBulkModal(true) }}
                     />
                   ))}
                   <AddMemberTile onAdd={() => setShowAddModal(true)} onBulkAdd={() => setShowBulkModal(true)} />
@@ -240,9 +243,10 @@ export default function TreeViewPage() {
             <div className="flex-1 overflow-y-auto p-4">
               <MemberCard
                 member={selectedMember}
-                onEdit={() => {}}
+                onEdit={() => setShowEditModal(true)}
                 onDelete={handleDeleteMember}
                 onAddRelative={(member) => { setAddRelativeTo(member); setShowAddModal(true) }}
+                onBulkAdd={(member) => { setAddRelativeTo(member); setShowBulkModal(true) }}
               />
             </div>
           </div>
@@ -254,8 +258,21 @@ export default function TreeViewPage() {
         <AddMemberModal
           treeId={treeId}
           relativeOf={addRelativeTo || undefined}
-          onSuccess={() => { fetchTree(); setAddRelativeTo(null) }}
+          onSuccess={(member) => {
+            fetchTree()
+            setAddRelativeTo(null)
+            setSelectedMember(member)
+            setShowEditModal(true)
+          }}
           onClose={() => { setShowAddModal(false); setAddRelativeTo(null) }}
+        />
+      )}
+
+      {showEditModal && selectedMember && (
+        <EditMemberModal
+          member={selectedMember}
+          onSuccess={(updated) => { setSelectedMember(updated); fetchTree() }}
+          onClose={() => setShowEditModal(false)}
         />
       )}
 

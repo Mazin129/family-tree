@@ -59,10 +59,11 @@ interface AddMemberModalProps {
   onClose:        () => void
 }
 
+// Spouse first for clarity (e.g. Muslim multiple wives); system allows multiple SPOUSE_OF per person
 const RELATIONSHIP_OPTIONS: { value: RelationshipType; label: string }[] = [
+  { value: 'SPOUSE_OF',        label: 'زوج/زوجة' },
   { value: 'CHILD_OF',         label: 'ابن/ابنة' },
   { value: 'PARENT_OF',        label: 'والد/والدة' },
-  { value: 'SPOUSE_OF',        label: 'زوج/زوجة' },
   { value: 'SIBLING_OF',       label: 'أخ/أخت' },
   { value: 'HALF_SIBLING_OF',  label: 'أخ/أخت من طرف واحد' },
   { value: 'ADOPTED_CHILD_OF', label: 'ابن/ابنة بالتبني' },
@@ -159,6 +160,9 @@ export function AddMemberModal({ treeId, relativeOf, onSuccess, onClose }: AddMe
             {relativeOf && (
               <div className="p-4 bg-sand-50 rounded-xl border border-sand-200">
                 <label className="label">نوع العلاقة مع {relativeOf.fullNameArabic || relativeOf.fullName}</label>
+                <p className="text-xs text-khartoum-500 mt-1 mb-2">
+                  يمكن إضافة أكثر من زوج/زوجة للشخص نفسه (حسب الشرع).
+                </p>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
                   {RELATIONSHIP_OPTIONS.map(opt => (
                     <label
