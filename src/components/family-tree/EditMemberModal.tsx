@@ -29,17 +29,14 @@ const editSchema = z.object({
   occupation:     z.string().optional().or(z.literal('')),
   privacyLevel:   z.enum(['PUBLIC', 'COMMUNITY', 'FAMILY', 'PRIVATE']),
 }).refine(
-  data => !!(data.fullName?.trim() || data.fullNameArabic?.trim()),
-  { message: 'يجب إدخال الاسم بالعربية أو بالإنجليزية على الأقل', path: ['fullName'] }
-).refine(
   data => {
-    if (data.birthYear && data.deathYear && data.deathYear < data.birthYear) return false
+    if (data.birthYear != null && data.deathYear != null && data.deathYear < data.birthYear) return false
     return true
   },
   { message: 'سنة الوفاة قبل سنة الميلاد', path: ['deathYear'] }
 ).refine(
   data => {
-    if (data.isAlive && data.deathYear) return false
+    if (data.isAlive && data.deathYear != null) return false
     return true
   },
   { message: 'لا يمكن تحديد سنة وفاة لشخص على قيد الحياة', path: ['deathYear'] }
@@ -95,12 +92,20 @@ export function EditMemberModal({ member, onSuccess, onClose }: EditMemberModalP
 
   async function onSubmit(data: EditForm) {
     try {
+      // If both names empty, keep existing (allow saving when only changing alive/deceased)
+      const fullName = (data.fullName?.trim() || data.fullNameArabic?.trim())
+        ? (data.fullName?.trim() || null)
+        : (member.fullName || null)
+      const fullNameArabic = (data.fullName?.trim() || data.fullNameArabic?.trim())
+        ? (data.fullNameArabic?.trim() || null)
+        : (member.fullNameArabic || null)
+
       const res = await fetch(`/api/family/members/${member.id}`, {
         method:  'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
-          fullName:       data.fullName || null,
-          fullNameArabic: data.fullNameArabic || null,
+          fullName:       fullName,
+          fullNameArabic: fullNameArabic,
           fatherName:     data.fatherName || null,
           grandfatherName: data.grandfatherName || null,
           gender:         data.gender,
@@ -164,7 +169,7 @@ export function EditMemberModal({ member, onSuccess, onClose }: EditMemberModalP
             </div>
 
             <div>
-              <label className="label">الجنس *</label>
+              <label className="label">الجنس</label>
               <div className="flex gap-3">
                 {[
                   { value: 'MALE', label: 'ذكر', color: 'nile' },
@@ -203,7 +208,7 @@ export function EditMemberModal({ member, onSuccess, onClose }: EditMemberModalP
               </div>
               <div className="flex items-center gap-3 mt-6">
                 <input {...register('isAlive')} type="checkbox" id="editIsAlive" className="h-4 w-4 rounded border-khartoum-300 text-sand-500" />
-                <label htmlFor="editIsAlive" className="text-sm text-khartoum-700">لا يزال على قيد الحياة</label>
+                <label htmlFor="editIsAlive" className="text-sm text-khartoum-700">لا يزال على قيد الحياة <span className="text-khartoum-400 font-normal">(يمكن تغيير الحالة دون إلزام بحقل سنة الوفاة)</span></label>
               </div>
               {!isAlive && (
                 <div>
