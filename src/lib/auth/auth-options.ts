@@ -4,6 +4,14 @@ import GoogleProvider from 'next-auth/providers/google'
 import CredentialsProvider from 'next-auth/providers/credentials'
 import bcrypt from 'bcryptjs'
 import { prisma } from '@/lib/db/prisma'
+import { HttpsProxyAgent } from 'https-proxy-agent'
+
+// When running behind a sandbox/proxy that blocks direct outbound DNS,
+// route OAuth token-exchange requests through the available HTTPS proxy.
+// On a regular VPS (no HTTPS_PROXY set), this is a no-op.
+const oauthAgent = process.env.HTTPS_PROXY
+  ? new HttpsProxyAgent(process.env.HTTPS_PROXY)
+  : undefined
 
 // Real credentials are present when they exist and are not the placeholder values
 const GOOGLE_CLIENT_ID     = process.env.GOOGLE_CLIENT_ID     || ''
@@ -33,6 +41,7 @@ export const authOptions: NextAuthOptions = {
       ? [GoogleProvider({
           clientId:     GOOGLE_CLIENT_ID,
           clientSecret: GOOGLE_CLIENT_SECRET,
+          httpOptions:  oauthAgent ? { agent: oauthAgent } : {},
           authorization: {
             params: {
               prompt: 'consent',

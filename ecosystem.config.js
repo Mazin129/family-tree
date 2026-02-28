@@ -28,6 +28,18 @@ module.exports = {
         GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
         GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
 
+        // ── Outbound proxy (sandbox / restricted network environments) ─
+        // Passed so the app can route OAuth token-exchange through the
+        // egress proxy.  Empty string on plain VPS deployments → no-op.
+        HTTPS_PROXY: process.env.HTTPS_PROXY || '',
+        HTTP_PROXY:  process.env.HTTP_PROXY  || '',
+        // Preserve NO_PROXY but strip Google from it so the app can
+        // reach Google's OAuth token endpoint through the proxy above.
+        NO_PROXY: (process.env.NO_PROXY || '')
+          .split(',')
+          .filter(h => !h.includes('google'))
+          .join(','),
+
         // ── Database ──────────────────────────────────────────────────
         DATABASE_URL: process.env.DATABASE_URL,
         NEO4J_URI: process.env.NEO4J_URI,
