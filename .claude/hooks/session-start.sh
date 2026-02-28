@@ -12,6 +12,16 @@ PROJECT=/home/user/family-tree
 
 echo "[session-start] Ensuring Next.js server is running..."
 
+# ── 0. Ensure PostgreSQL is running ─────────────────────────────────────────
+if ! pg_ctlcluster 16 main status > /dev/null 2>&1; then
+  echo "[session-start] PostgreSQL not running — starting..."
+  pg_ctlcluster 16 main start || true
+  sleep 2
+  echo "[session-start] PostgreSQL started."
+else
+  echo "[session-start] PostgreSQL already running."
+fi
+
 # ── 1. Ensure standalone static assets are in place ─────────────────────────
 # next build with output:standalone omits .next/static and public — copy them in.
 if [ -d "$PROJECT/.next/static" ] && [ -d "$PROJECT/.next/standalone" ]; then
