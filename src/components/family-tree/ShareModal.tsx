@@ -54,13 +54,24 @@ export function ShareModal({ treeId, treeName, onClose }: ShareModalProps) {
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
-      const res  = await fetch(`/api/family/trees/${treeId}/collaborators`)
-      const json = await res.json()
-      if (json.success) {
+      const res = await fetch(`/api/family/trees/${treeId}/collaborators`)
+      let json: { success?: boolean; data?: { collaborators: Collaborator[]; invites: InviteToken[] }; error?: string }
+      try {
+        json = await res.json()
+      } catch {
+        toast.error(res.ok ? 'فشل الاتصال بالخادم' : `خطأ من الخادم (${res.status})`)
+        setLoading(false)
+        return
+      }
+      if (json.success && json.data) {
         setCollaborators(json.data.collaborators)
         setInvites(json.data.invites)
+      } else if (!res.ok) {
+        toast.error(json.error || `خطأ ${res.status}`)
       }
-    } catch { /* silent */ }
+    } catch {
+      toast.error('فشل الاتصال بالخادم')
+    }
     setLoading(false)
   }, [treeId])
 
@@ -69,20 +80,29 @@ export function ShareModal({ treeId, treeName, onClose }: ShareModalProps) {
   async function generateLink() {
     setGenerating(true)
     try {
-      const res  = await fetch(`/api/family/trees/${treeId}/collaborators`, {
+      const res = await fetch(`/api/family/trees/${treeId}/collaborators`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ role: newRole, daysValid: 7 }),
       })
-      const json = await res.json()
-      if (json.success) {
+      let json: { success?: boolean; data?: { inviteUrl: string }; error?: string }
+      try {
+        json = await res.json()
+      } catch {
+        toast.error(res.ok ? 'فشل الاتصال بالخادم' : `خطأ من الخادم (${res.status})`)
+        setGenerating(false)
+        return
+      }
+      if (json.success && json.data?.inviteUrl) {
         setActiveLink(json.data.inviteUrl)
         await fetchData()
         toast.success('تم إنشاء رابط الدعوة')
       } else {
         toast.error(json.error || 'فشل إنشاء الرابط')
       }
-    } catch { toast.error('فشل الاتصال بالخادم') }
+    } catch {
+      toast.error('فشل الاتصال بالخادم')
+    }
     setGenerating(false)
   }
 
