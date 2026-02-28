@@ -1,11 +1,19 @@
 'use client'
 
 import { useState } from 'react'
-import { X, Plus, Trash2, Loader2, Users, ChevronDown, Search, UserCircle2 } from 'lucide-react'
+import { X, Plus, Trash2, Loader2, Users, ChevronDown, Search, User } from 'lucide-react'
 import { toast } from 'sonner'
 import type { TreeMember, RelationshipType } from '@/types'
 import { SUDANESE_TRIBES, REGION_LABELS } from '@/types'
 import { cn } from '@/lib/utils/cn'
+
+// ── Sudanese lineage helper ───────────────────────────────────────────────────
+// In Sudan: "ود" = son of (male), "بنت" = daughter of (female)
+function lineageOf(gender: 'MALE' | 'FEMALE', father?: string | null, grandfather?: string | null): string {
+  if (!father && !grandfather) return ''
+  const p = gender === 'FEMALE' ? 'بنت' : 'ود'
+  return [father && `${p} ${father}`, grandfather && `${p} ${grandfather}`].filter(Boolean).join(' ')
+}
 
 // ── Relationship options ──────────────────────────────────────────────────────
 const REL_OPTIONS: { value: RelationshipType; labelFull: string; labelShort: string; icon: string }[] = [
@@ -23,7 +31,7 @@ interface BulkMemberRow {
   id:             string
   fullNameArabic: string
   fullName:       string
-  gender:         'MALE' | 'FEMALE' | 'UNSPECIFIED'
+  gender:         'MALE' | 'FEMALE'
   birthYear:      string
   relType:        RelationshipType | ''   // '' = inherit from shared
   anchorId:       string                 // '' = use shared anchor
@@ -196,7 +204,7 @@ export function BulkAddMembersModal({
             {/* ── Section 1: Anchor person ─────────────────────────────── */}
             <div className="rounded-xl border border-sand-200 overflow-visible">
               <div className="px-4 py-3 bg-sand-50 flex items-center gap-2">
-                <UserCircle2 className="w-4 h-4 text-khartoum-400 shrink-0" />
+                <User className="w-4 h-4 text-khartoum-400 shrink-0" />
                 <span className="text-sm font-semibold text-khartoum-700">
                   الإضافة بالنسبة لـ
                 </span>
@@ -212,12 +220,11 @@ export function BulkAddMembersModal({
                     {/* Avatar */}
                     <div
                       className={cn(
-                        'w-11 h-11 rounded-xl flex items-center justify-center text-white font-bold text-base shrink-0',
-                        anchorMember.gender === 'MALE'   ? 'bg-blue-500'
-                        : anchorMember.gender === 'FEMALE' ? 'bg-pink-500' : 'bg-slate-400'
+                        'w-11 h-11 rounded-xl flex items-center justify-center text-white shrink-0',
+                        anchorMember.gender === 'MALE' ? 'bg-blue-500' : 'bg-pink-500'
                       )}
                     >
-                      {(anchorMember.fullNameArabic || anchorMember.fullName || '؟').charAt(0)}
+                      <User className="w-5 h-5" />
                     </div>
 
                     {/* Details */}
@@ -227,13 +234,10 @@ export function BulkAddMembersModal({
                         {anchorMember.fullNameArabic || anchorMember.fullName}
                       </p>
 
-                      {/* Lineage chain: بن أب بن جد */}
-                      {(anchorMember.fatherName || anchorMember.grandfatherName) && (
+                      {/* Sudanese lineage: ود أب ود جد / بنت أب بنت جد */}
+                      {lineageOf(anchorMember.gender as 'MALE'|'FEMALE', anchorMember.fatherName, anchorMember.grandfatherName) && (
                         <p className="text-xs text-khartoum-600 mt-0.5 leading-tight">
-                          {[
-                            anchorMember.fatherName        && `بن ${anchorMember.fatherName}`,
-                            anchorMember.grandfatherName   && `بن ${anchorMember.grandfatherName}`,
-                          ].filter(Boolean).join(' ')}
+                          {lineageOf(anchorMember.gender as 'MALE'|'FEMALE', anchorMember.fatherName, anchorMember.grandfatherName)}
                         </p>
                       )}
 
@@ -241,11 +245,9 @@ export function BulkAddMembersModal({
                       <div className="flex items-center flex-wrap gap-1.5 mt-1">
                         <span className={cn(
                           'inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold',
-                          anchorMember.gender === 'MALE'   ? 'bg-blue-50 text-blue-700'
-                          : anchorMember.gender === 'FEMALE' ? 'bg-pink-50 text-pink-700'
-                          : 'bg-slate-50 text-slate-500'
+                          anchorMember.gender === 'MALE' ? 'bg-blue-50 text-blue-700' : 'bg-pink-50 text-pink-700'
                         )}>
-                          {anchorMember.gender === 'MALE' ? 'ذكر' : anchorMember.gender === 'FEMALE' ? 'أنثى' : 'غير محدد'}
+                          {anchorMember.gender === 'MALE' ? 'ذكر' : 'أنثى'}
                         </span>
                         {anchorMember.birthYear && (
                           <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-sand-100 text-khartoum-500">
@@ -296,11 +298,7 @@ export function BulkAddMembersModal({
                         {filteredMembers.length === 0 ? (
                           <p className="text-xs text-khartoum-400 text-center py-4">لا توجد نتائج</p>
                         ) : filteredMembers.map(m => {
-                          const lineage = [
-                            m.fatherName      && `بن ${m.fatherName}`,
-                            m.grandfatherName && `بن ${m.grandfatherName}`,
-                          ].filter(Boolean).join(' ')
-
+                          const lin = lineageOf(m.gender as 'MALE'|'FEMALE', m.fatherName, m.grandfatherName)
                           return (
                             <button
                               key={m.id}
@@ -310,10 +308,10 @@ export function BulkAddMembersModal({
                             >
                               {/* Avatar */}
                               <div className={cn(
-                                'w-9 h-9 rounded-lg flex items-center justify-center text-white text-sm font-bold shrink-0',
-                                m.gender === 'MALE' ? 'bg-blue-400' : m.gender === 'FEMALE' ? 'bg-pink-400' : 'bg-slate-300'
+                                'w-9 h-9 rounded-lg flex items-center justify-center text-white shrink-0',
+                                m.gender === 'MALE' ? 'bg-blue-400' : 'bg-pink-400'
                               )}>
-                                {(m.fullNameArabic || m.fullName || '؟').charAt(0)}
+                                <User className="w-4 h-4" />
                               </div>
 
                               {/* Name + details */}
@@ -321,10 +319,9 @@ export function BulkAddMembersModal({
                                 <p className="text-sm font-semibold text-khartoum-900 leading-tight">
                                   {m.fullNameArabic || m.fullName}
                                 </p>
-                                {lineage && (
-                                  <p className="text-xs text-khartoum-500 leading-tight mt-0.5">{lineage}</p>
+                                {lin && (
+                                  <p className="text-xs text-khartoum-500 leading-tight mt-0.5">{lin}</p>
                                 )}
-                                {/* Meta badges */}
                                 <div className="flex items-center flex-wrap gap-1 mt-0.5">
                                   {m.birthYear && (
                                     <span className="text-[10px] text-khartoum-400">{m.birthYear}م</span>
@@ -341,11 +338,9 @@ export function BulkAddMembersModal({
                               {/* Gender badge */}
                               <span className={cn(
                                 'text-[10px] font-semibold px-1.5 py-0.5 rounded shrink-0',
-                                m.gender === 'MALE'   ? 'bg-blue-50 text-blue-600'
-                                : m.gender === 'FEMALE' ? 'bg-pink-50 text-pink-600'
-                                : 'bg-slate-50 text-slate-400'
+                                m.gender === 'MALE' ? 'bg-blue-50 text-blue-600' : 'bg-pink-50 text-pink-600'
                               )}>
-                                {m.gender === 'MALE' ? 'ذكر' : m.gender === 'FEMALE' ? 'أنثى' : '—'}
+                                {m.gender === 'MALE' ? 'ذكر' : 'أنثى'}
                               </span>
                             </button>
                           )
@@ -515,18 +510,16 @@ export function BulkAddMembersModal({
                           dir="ltr"
                         />
 
-                        <div className="flex gap-0.5 justify-center shrink-0">
+                        <div className="flex gap-1 justify-center shrink-0">
                           {([
-                            { v: 'MALE',        label: 'م', ac: 'border-blue-400 bg-blue-50 text-blue-700'     },
-                            { v: 'FEMALE',      label: 'أ', ac: 'border-pink-400 bg-pink-50 text-pink-700'     },
-                            { v: 'UNSPECIFIED', label: '؟', ac: 'border-slate-300 bg-slate-50 text-slate-600' },
+                            { v: 'MALE',   label: 'ذكر',  ac: 'border-blue-400 bg-blue-50 text-blue-700'  },
+                            { v: 'FEMALE', label: 'أنثى', ac: 'border-pink-400 bg-pink-50 text-pink-700'  },
                           ] as const).map(g => (
                             <button
                               key={g.v} type="button"
                               onClick={() => updateRow(row.id, 'gender', g.v)}
-                              title={g.v === 'MALE' ? 'ذكر' : g.v === 'FEMALE' ? 'أنثى' : 'غير محدد'}
                               className={cn(
-                                'w-[26px] h-[26px] rounded-md text-[11px] font-bold border-2 transition-all',
+                                'px-2 h-[26px] rounded-md text-[11px] font-bold border-2 transition-all',
                                 row.gender === g.v ? g.ac : 'border-sand-200 text-khartoum-300 hover:border-sand-300'
                               )}
                             >
@@ -588,14 +581,14 @@ export function BulkAddMembersModal({
                               {rowAnchor ? (
                                 <>
                                   <div className={cn(
-                                    'w-4 h-4 rounded-sm flex items-center justify-center text-white text-[9px] font-bold shrink-0',
-                                    rowAnchor.gender === 'MALE' ? 'bg-blue-400' : rowAnchor.gender === 'FEMALE' ? 'bg-pink-400' : 'bg-slate-300'
+                                    'w-4 h-4 rounded-sm flex items-center justify-center text-white shrink-0',
+                                    rowAnchor.gender === 'MALE' ? 'bg-blue-400' : 'bg-pink-400'
                                   )}>
-                                    {(rowAnchor.fullNameArabic || rowAnchor.fullName || '؟').charAt(0)}
+                                    <User className="w-2.5 h-2.5" />
                                   </div>
                                   <span className="max-w-[110px] truncate">
                                     {rowAnchor.fullNameArabic || rowAnchor.fullName}
-                                    {rowAnchor.fatherName && ` بن ${rowAnchor.fatherName}`}
+                                    {rowAnchor.fatherName && ` ${rowAnchor.gender === 'FEMALE' ? 'بنت' : 'ود'} ${rowAnchor.fatherName}`}
                                   </span>
                                   {rowAnchor.birthYear && (
                                     <span className="opacity-50 shrink-0">{rowAnchor.birthYear}م</span>
@@ -645,11 +638,7 @@ export function BulkAddMembersModal({
                                 {rowFiltered.length === 0 ? (
                                   <p className="text-xs text-khartoum-400 text-center py-4">لا توجد نتائج</p>
                                 ) : rowFiltered.map(m => {
-                                  const lin = [
-                                    m.fatherName      && `بن ${m.fatherName}`,
-                                    m.grandfatherName && `بن ${m.grandfatherName}`,
-                                  ].filter(Boolean).join(' ')
-
+                                  const lin = lineageOf(m.gender as 'MALE'|'FEMALE', m.fatherName, m.grandfatherName)
                                   return (
                                     <button
                                       key={m.id}
@@ -662,10 +651,10 @@ export function BulkAddMembersModal({
                                       className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-sand-50 transition-colors text-right border-b border-sand-50 last:border-0"
                                     >
                                       <div className={cn(
-                                        'w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-bold shrink-0',
-                                        m.gender === 'MALE' ? 'bg-blue-400' : m.gender === 'FEMALE' ? 'bg-pink-400' : 'bg-slate-300'
+                                        'w-8 h-8 rounded-lg flex items-center justify-center text-white shrink-0',
+                                        m.gender === 'MALE' ? 'bg-blue-400' : 'bg-pink-400'
                                       )}>
-                                        {(m.fullNameArabic || m.fullName || '؟').charAt(0)}
+                                        <User className="w-4 h-4" />
                                       </div>
                                       <div className="flex-1 min-w-0">
                                         <p className="text-xs font-semibold text-khartoum-900 truncate leading-tight">
@@ -679,9 +668,9 @@ export function BulkAddMembersModal({
                                       </div>
                                       <span className={cn(
                                         'text-[10px] font-semibold px-1.5 py-0.5 rounded shrink-0',
-                                        m.gender === 'MALE' ? 'bg-blue-50 text-blue-600' : m.gender === 'FEMALE' ? 'bg-pink-50 text-pink-600' : 'bg-slate-50 text-slate-400'
+                                        m.gender === 'MALE' ? 'bg-blue-50 text-blue-600' : 'bg-pink-50 text-pink-600'
                                       )}>
-                                        {m.gender === 'MALE' ? 'ذكر' : m.gender === 'FEMALE' ? 'أنثى' : '—'}
+                                        {m.gender === 'MALE' ? 'ذكر' : 'أنثى'}
                                       </span>
                                     </button>
                                   )
