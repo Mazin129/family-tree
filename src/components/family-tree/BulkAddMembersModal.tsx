@@ -26,6 +26,8 @@ interface BulkMemberRow {
   gender:         'MALE' | 'FEMALE' | 'UNSPECIFIED'
   birthYear:      string
   relType:        RelationshipType | ''   // '' = inherit from shared
+  anchorId:       string                 // '' = use shared anchor
+  anchorName:     string                 // display only
 }
 
 function newRow(): BulkMemberRow {
@@ -36,6 +38,8 @@ function newRow(): BulkMemberRow {
     gender:         'MALE',
     birthYear:      '',
     relType:        '',
+    anchorId:       '',
+    anchorName:     '',
   }
 }
 
@@ -66,18 +70,29 @@ export function BulkAddMembersModal({
   const [showSharedFields, setShowSharedFields] = useState(false)
 
   // Rows
-  const [rows,         setRows]        = useState<BulkMemberRow[]>([newRow(), newRow()])
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [rows,              setRows]             = useState<BulkMemberRow[]>([newRow(), newRow()])
+  const [isSubmitting,      setIsSubmitting]      = useState(false)
+
+  // Per-row anchor picker
+  const [rowPickerOpenId,   setRowPickerOpenId]   = useState<string | null>(null)
+  const [rowPickerSearch,   setRowPickerSearch]   = useState('')
 
   const validCount = rows.filter(r => r.fullNameArabic.trim() || r.fullName.trim()).length
 
   // ── Anchor member helpers ──────────────────────────────────────────────────
   const hasExisting = existingMembers.length > 0
   const filteredMembers = memberSearch.trim()
-    ? existingMembers.filter(m =>
-        (m.fullNameArabic || '').includes(memberSearch) ||
-        (m.fullName || '').toLowerCase().includes(memberSearch.toLowerCase())
-      )
+    ? existingMembers.filter(m => {
+        const q = memberSearch.trim()
+        return (
+          (m.fullNameArabic    || '').includes(q) ||
+          (m.fullName          || '').toLowerCase().includes(q.toLowerCase()) ||
+          (m.fatherName        || '').includes(q) ||
+          (m.grandfatherName   || '').includes(q) ||
+          (m.tribe             || '').includes(q) ||
+          (m.birthYear?.toString() || '').includes(q)
+        )
+      })
     : existingMembers
 
   function selectAnchor(m: TreeMember) {
@@ -123,12 +138,13 @@ export function BulkAddMembersModal({
         birthRegion:      sharedRegion        || null,
         lineage:          sharedLineage       || null,
         members: validMembers.map(m => ({
-          fullNameArabic:  m.fullNameArabic.trim() || null,
-          fullName:        m.fullName.trim()        || null,
-          gender:          m.gender,
-          isAlive:         true,
-          birthYear:       m.birthYear ? parseInt(m.birthYear, 10) : null,
-          relationshipType: m.relType || null,   // per-row override
+          fullNameArabic:   m.fullNameArabic.trim() || null,
+          fullName:         m.fullName.trim()        || null,
+          gender:           m.gender,
+          isAlive:          true,
+          birthYear:        m.birthYear ? parseInt(m.birthYear, 10) : null,
+          relationshipType: m.relType   || null,   // per-row override
+          relativeOfId:     m.anchorId  || null,   // per-row anchor override
         })),
       }
 
@@ -193,25 +209,63 @@ export function BulkAddMembersModal({
                 {/* Anchor display / picker */}
                 {anchorMember ? (
                   <div className="flex items-center gap-3">
-                    {/* Avatar chip */}
+                    {/* Avatar */}
                     <div
                       className={cn(
-                        'w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-base shrink-0',
+                        'w-11 h-11 rounded-xl flex items-center justify-center text-white font-bold text-base shrink-0',
                         anchorMember.gender === 'MALE'   ? 'bg-blue-500'
                         : anchorMember.gender === 'FEMALE' ? 'bg-pink-500' : 'bg-slate-400'
                       )}
                     >
                       {(anchorMember.fullNameArabic || anchorMember.fullName || '؟').charAt(0)}
                     </div>
+
+                    {/* Details */}
                     <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-khartoum-900 text-sm leading-tight">
+                      {/* Primary name */}
+                      <p className="font-bold text-khartoum-900 text-sm leading-tight">
                         {anchorMember.fullNameArabic || anchorMember.fullName}
                       </p>
-                      {anchorMember.birthYear && (
-                        <p className="text-xs text-khartoum-400 mt-0.5">{anchorMember.birthYear}م</p>
+
+                      {/* Lineage chain: بن أب بن جد */}
+                      {(anchorMember.fatherName || anchorMember.grandfatherName) && (
+                        <p className="text-xs text-khartoum-600 mt-0.5 leading-tight">
+                          {[
+                            anchorMember.fatherName        && `بن ${anchorMember.fatherName}`,
+                            anchorMember.grandfatherName   && `بن ${anchorMember.grandfatherName}`,
+                          ].filter(Boolean).join(' ')}
+                        </p>
                       )}
+
+                      {/* Tags row: gender · year · tribe */}
+                      <div className="flex items-center flex-wrap gap-1.5 mt-1">
+                        <span className={cn(
+                          'inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold',
+                          anchorMember.gender === 'MALE'   ? 'bg-blue-50 text-blue-700'
+                          : anchorMember.gender === 'FEMALE' ? 'bg-pink-50 text-pink-700'
+                          : 'bg-slate-50 text-slate-500'
+                        )}>
+                          {anchorMember.gender === 'MALE' ? 'ذكر' : anchorMember.gender === 'FEMALE' ? 'أنثى' : 'غير محدد'}
+                        </span>
+                        {anchorMember.birthYear && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-sand-100 text-khartoum-500">
+                            {anchorMember.birthYear}م
+                          </span>
+                        )}
+                        {anchorMember.tribe && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-amber-50 text-amber-700 truncate max-w-[120px]">
+                            {anchorMember.tribe}
+                          </span>
+                        )}
+                        {anchorMember.occupation && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-khartoum-50 text-khartoum-500 truncate max-w-[120px]">
+                            {anchorMember.occupation}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    {/* Allow change unless relativeOf is locked */}
+
+                    {/* Allow change unless locked by relativeOf prop */}
                     {!relativeOf && (
                       <button
                         type="button"
@@ -241,29 +295,61 @@ export function BulkAddMembersModal({
                       <div className="absolute top-full right-0 left-0 z-10 mt-1 bg-white border border-sand-200 rounded-xl shadow-xl max-h-52 overflow-y-auto">
                         {filteredMembers.length === 0 ? (
                           <p className="text-xs text-khartoum-400 text-center py-4">لا توجد نتائج</p>
-                        ) : filteredMembers.map(m => (
-                          <button
-                            key={m.id}
-                            type="button"
-                            onClick={() => selectAnchor(m)}
-                            className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-sand-50 transition-colors text-right"
-                          >
-                            <div className={cn(
-                              'w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm font-bold shrink-0',
-                              m.gender === 'MALE' ? 'bg-blue-400' : m.gender === 'FEMALE' ? 'bg-pink-400' : 'bg-slate-300'
-                            )}>
-                              {(m.fullNameArabic || m.fullName || '؟').charAt(0)}
-                            </div>
-                            <div className="flex-1 min-w-0 text-right">
-                              <p className="text-sm font-medium text-khartoum-800 truncate">
-                                {m.fullNameArabic || m.fullName}
-                              </p>
-                              {m.birthYear && (
-                                <p className="text-xs text-khartoum-400">{m.birthYear}م</p>
-                              )}
-                            </div>
-                          </button>
-                        ))}
+                        ) : filteredMembers.map(m => {
+                          const lineage = [
+                            m.fatherName      && `بن ${m.fatherName}`,
+                            m.grandfatherName && `بن ${m.grandfatherName}`,
+                          ].filter(Boolean).join(' ')
+
+                          return (
+                            <button
+                              key={m.id}
+                              type="button"
+                              onClick={() => selectAnchor(m)}
+                              className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-sand-50 transition-colors text-right border-b border-sand-50 last:border-0"
+                            >
+                              {/* Avatar */}
+                              <div className={cn(
+                                'w-9 h-9 rounded-lg flex items-center justify-center text-white text-sm font-bold shrink-0',
+                                m.gender === 'MALE' ? 'bg-blue-400' : m.gender === 'FEMALE' ? 'bg-pink-400' : 'bg-slate-300'
+                              )}>
+                                {(m.fullNameArabic || m.fullName || '؟').charAt(0)}
+                              </div>
+
+                              {/* Name + details */}
+                              <div className="flex-1 min-w-0 text-right">
+                                <p className="text-sm font-semibold text-khartoum-900 leading-tight">
+                                  {m.fullNameArabic || m.fullName}
+                                </p>
+                                {lineage && (
+                                  <p className="text-xs text-khartoum-500 leading-tight mt-0.5">{lineage}</p>
+                                )}
+                                {/* Meta badges */}
+                                <div className="flex items-center flex-wrap gap-1 mt-0.5">
+                                  {m.birthYear && (
+                                    <span className="text-[10px] text-khartoum-400">{m.birthYear}م</span>
+                                  )}
+                                  {m.tribe && (
+                                    <span className="text-[10px] text-amber-600 before:content-['·'] before:mx-1">{m.tribe}</span>
+                                  )}
+                                  {m.occupation && (
+                                    <span className="text-[10px] text-khartoum-400 before:content-['·'] before:mx-1">{m.occupation}</span>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Gender badge */}
+                              <span className={cn(
+                                'text-[10px] font-semibold px-1.5 py-0.5 rounded shrink-0',
+                                m.gender === 'MALE'   ? 'bg-blue-50 text-blue-600'
+                                : m.gender === 'FEMALE' ? 'bg-pink-50 text-pink-600'
+                                : 'bg-slate-50 text-slate-400'
+                              )}>
+                                {m.gender === 'MALE' ? 'ذكر' : m.gender === 'FEMALE' ? 'أنثى' : '—'}
+                              </span>
+                            </button>
+                          )
+                        })}
                       </div>
                     )}
                   </div>
@@ -353,7 +439,7 @@ export function BulkAddMembersModal({
               )}
             </div>
 
-            {/* ── Section 4: Members table ─────────────────────────────── */}
+            {/* ── Section 4: Members ───────────────────────────────────── */}
             <div>
               <div className="flex items-center justify-between mb-2">
                 <p className="text-sm font-semibold text-khartoum-800">
@@ -367,134 +453,268 @@ export function BulkAddMembersModal({
                 <span className="text-xs text-khartoum-400">{rows.length} / ٢٠</span>
               </div>
 
-              {/* Column headers */}
-              <div className="hidden sm:grid grid-cols-[26px_1fr_1fr_82px_66px_96px_28px] gap-1.5 px-2 mb-1 text-xs text-khartoum-400 font-medium">
-                <span>#</span>
-                <span>الاسم بالعربية</span>
-                <span>بالإنجليزية</span>
-                <span className="text-center">الجنس</span>
-                <span className="text-center">ميلاد</span>
-                <span className="text-center">
-                  العلاقة
-                  {sharedRelType && (
-                    <span className="block text-[10px] text-khartoum-300 font-normal leading-tight truncate">
-                      ({sharedRelLabel})
-                    </span>
-                  )}
-                </span>
-                <span />
-              </div>
+              {/* Close row picker when clicking outside */}
+              {rowPickerOpenId && (
+                <div
+                  className="fixed inset-0 z-30"
+                  onClick={() => { setRowPickerOpenId(null); setRowPickerSearch('') }}
+                />
+              )}
 
-              <div className="space-y-1.5">
+              <div className="space-y-2">
                 {rows.map((row, i) => {
+                  // Effective anchor for this row
+                  const rowAnchor = row.anchorId
+                    ? existingMembers.find(m => m.id === row.anchorId) ?? null
+                    : anchorMember
+
+                  // Effective relationship
                   const effectiveRel = row.relType || sharedRelType
-                  const relLabel     = REL_OPTIONS.find(o => o.value === effectiveRel)?.labelShort ?? '—'
-                  const isOverridden = !!row.relType && row.relType !== sharedRelType
+                  const relOpt       = REL_OPTIONS.find(o => o.value === effectiveRel)
+                  const isRelOverride = !!row.relType && row.relType !== sharedRelType
+                  const isAnchorOverride = !!row.anchorId && row.anchorId !== anchorMember?.id
+
+                  // Filtered list for this row's picker
+                  const rowFiltered = rowPickerSearch.trim()
+                    ? existingMembers.filter(m => {
+                        const q = rowPickerSearch.trim()
+                        return (
+                          (m.fullNameArabic  || '').includes(q) ||
+                          (m.fullName        || '').toLowerCase().includes(q.toLowerCase()) ||
+                          (m.fatherName      || '').includes(q) ||
+                          (m.grandfatherName || '').includes(q) ||
+                          (m.tribe           || '').includes(q) ||
+                          (m.birthYear?.toString() || '').includes(q)
+                        )
+                      })
+                    : existingMembers
 
                   return (
                     <div
                       key={row.id}
-                      className="grid grid-cols-[26px_1fr_1fr_82px_66px_96px_28px] gap-1.5 items-center bg-white border border-sand-200 rounded-xl px-2 py-2 hover:border-sand-300 transition-colors"
+                      className="bg-white border border-sand-200 rounded-xl px-3 py-2.5 hover:border-sand-300 transition-colors space-y-2"
                     >
-                      {/* Index */}
-                      <span className="w-6 h-6 rounded-md bg-sand-100 text-khartoum-500 text-xs flex items-center justify-center font-bold shrink-0">
-                        {i + 1}
-                      </span>
+                      {/* ── Line 1: name · gender · year · delete ── */}
+                      <div className="grid grid-cols-[26px_1fr_1fr_82px_66px_28px] gap-1.5 items-center">
+                        <span className="w-6 h-6 rounded-md bg-sand-100 text-khartoum-500 text-xs flex items-center justify-center font-bold shrink-0">
+                          {i + 1}
+                        </span>
 
-                      {/* Arabic name */}
-                      <input
-                        value={row.fullNameArabic}
-                        onChange={e => updateRow(row.id, 'fullNameArabic', e.target.value)}
-                        placeholder="الاسم بالعربية"
-                        className="input py-1.5 text-sm min-w-0"
-                      />
+                        <input
+                          value={row.fullNameArabic}
+                          onChange={e => updateRow(row.id, 'fullNameArabic', e.target.value)}
+                          placeholder="الاسم بالعربية"
+                          className="input py-1.5 text-sm min-w-0"
+                        />
 
-                      {/* English name */}
-                      <input
-                        value={row.fullName}
-                        onChange={e => updateRow(row.id, 'fullName', e.target.value)}
-                        placeholder="English name"
-                        className="input py-1.5 text-sm text-left min-w-0"
-                        dir="ltr"
-                      />
+                        <input
+                          value={row.fullName}
+                          onChange={e => updateRow(row.id, 'fullName', e.target.value)}
+                          placeholder="English name"
+                          className="input py-1.5 text-sm text-left min-w-0"
+                          dir="ltr"
+                        />
 
-                      {/* Gender toggle */}
-                      <div className="flex gap-0.5 justify-center shrink-0">
-                        {([
-                          { v: 'MALE',        label: 'م', ac: 'border-blue-400 bg-blue-50 text-blue-700'     },
-                          { v: 'FEMALE',      label: 'أ', ac: 'border-pink-400 bg-pink-50 text-pink-700'     },
-                          { v: 'UNSPECIFIED', label: '؟', ac: 'border-slate-300 bg-slate-50 text-slate-600' },
-                        ] as const).map(g => (
-                          <button
-                            key={g.v}
-                            type="button"
-                            onClick={() => updateRow(row.id, 'gender', g.v)}
-                            title={g.v === 'MALE' ? 'ذكر' : g.v === 'FEMALE' ? 'أنثى' : 'غير محدد'}
+                        <div className="flex gap-0.5 justify-center shrink-0">
+                          {([
+                            { v: 'MALE',        label: 'م', ac: 'border-blue-400 bg-blue-50 text-blue-700'     },
+                            { v: 'FEMALE',      label: 'أ', ac: 'border-pink-400 bg-pink-50 text-pink-700'     },
+                            { v: 'UNSPECIFIED', label: '؟', ac: 'border-slate-300 bg-slate-50 text-slate-600' },
+                          ] as const).map(g => (
+                            <button
+                              key={g.v} type="button"
+                              onClick={() => updateRow(row.id, 'gender', g.v)}
+                              title={g.v === 'MALE' ? 'ذكر' : g.v === 'FEMALE' ? 'أنثى' : 'غير محدد'}
+                              className={cn(
+                                'w-[26px] h-[26px] rounded-md text-[11px] font-bold border-2 transition-all',
+                                row.gender === g.v ? g.ac : 'border-sand-200 text-khartoum-300 hover:border-sand-300'
+                              )}
+                            >
+                              {g.label}
+                            </button>
+                          ))}
+                        </div>
+
+                        <input
+                          value={row.birthYear}
+                          onChange={e => updateRow(row.id, 'birthYear', e.target.value)}
+                          placeholder="—"
+                          type="number"
+                          min={1600}
+                          max={new Date().getFullYear()}
+                          className="input py-1.5 text-sm text-center w-full"
+                          dir="ltr"
+                        />
+
+                        <button
+                          type="button"
+                          onClick={() => removeRow(row.id)}
+                          disabled={rows.length <= 1}
+                          className={cn(
+                            'w-6 h-6 rounded-md flex items-center justify-center transition-colors shrink-0',
+                            rows.length <= 1 ? 'text-sand-200 cursor-not-allowed' : 'text-khartoum-300 hover:bg-red-50 hover:text-red-500'
+                          )}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      {/* ── Line 2: anchor person + relationship ── */}
+                      {hasExisting && (
+                        <div className="flex items-center gap-2 pr-8 flex-wrap">
+                          {/* "بالنسبة لـ" label */}
+                          <span className="text-[11px] text-khartoum-400 shrink-0">بالنسبة لـ</span>
+
+                          {/* Per-row anchor picker trigger */}
+                          <div className="relative z-40">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (rowPickerOpenId === row.id) {
+                                  setRowPickerOpenId(null); setRowPickerSearch('')
+                                } else {
+                                  setRowPickerOpenId(row.id); setRowPickerSearch('')
+                                }
+                              }}
+                              className={cn(
+                                'flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium transition-all',
+                                isAnchorOverride
+                                  ? 'border-violet-400 bg-violet-50 text-violet-800'
+                                  : rowAnchor
+                                  ? 'border-khartoum-300 bg-khartoum-50 text-khartoum-700'
+                                  : 'border-dashed border-sand-300 text-khartoum-400 hover:border-sand-400'
+                              )}
+                            >
+                              {rowAnchor ? (
+                                <>
+                                  <div className={cn(
+                                    'w-4 h-4 rounded-sm flex items-center justify-center text-white text-[9px] font-bold shrink-0',
+                                    rowAnchor.gender === 'MALE' ? 'bg-blue-400' : rowAnchor.gender === 'FEMALE' ? 'bg-pink-400' : 'bg-slate-300'
+                                  )}>
+                                    {(rowAnchor.fullNameArabic || rowAnchor.fullName || '؟').charAt(0)}
+                                  </div>
+                                  <span className="max-w-[110px] truncate">
+                                    {rowAnchor.fullNameArabic || rowAnchor.fullName}
+                                    {rowAnchor.fatherName && ` بن ${rowAnchor.fatherName}`}
+                                  </span>
+                                  {rowAnchor.birthYear && (
+                                    <span className="opacity-50 shrink-0">{rowAnchor.birthYear}م</span>
+                                  )}
+                                  {isAnchorOverride && <span className="text-violet-500 shrink-0">★</span>}
+                                </>
+                              ) : (
+                                <>
+                                  <Search className="w-3 h-3" />
+                                  اختر شخصاً
+                                </>
+                              )}
+                            </button>
+
+                            {/* Per-row picker dropdown */}
+                            {rowPickerOpenId === row.id && (
+                              <div className="absolute top-full right-0 z-50 mt-1 w-72 bg-white border border-sand-200 rounded-xl shadow-2xl max-h-52 overflow-y-auto">
+                                {/* Search input */}
+                                <div className="sticky top-0 bg-white border-b border-sand-100 px-3 py-2">
+                                  <div className="flex items-center gap-2">
+                                    <Search className="w-3.5 h-3.5 text-khartoum-300 shrink-0" />
+                                    <input
+                                      autoFocus
+                                      value={rowPickerSearch}
+                                      onChange={e => setRowPickerSearch(e.target.value)}
+                                      placeholder="ابحث بالاسم، الأب، القبيلة..."
+                                      className="flex-1 text-xs outline-none bg-transparent"
+                                    />
+                                  </div>
+                                </div>
+
+                                {/* Clear override option */}
+                                {row.anchorId && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      updateRow(row.id, 'anchorId', '')
+                                      updateRow(row.id, 'anchorName', '')
+                                      setRowPickerOpenId(null); setRowPickerSearch('')
+                                    }}
+                                    className="w-full px-3 py-2 text-xs text-khartoum-400 hover:bg-sand-50 text-right border-b border-sand-50"
+                                  >
+                                    ↩ استخدم الافتراضي «{anchorMember?.fullNameArabic || anchorMember?.fullName || '—'}»
+                                  </button>
+                                )}
+
+                                {rowFiltered.length === 0 ? (
+                                  <p className="text-xs text-khartoum-400 text-center py-4">لا توجد نتائج</p>
+                                ) : rowFiltered.map(m => {
+                                  const lin = [
+                                    m.fatherName      && `بن ${m.fatherName}`,
+                                    m.grandfatherName && `بن ${m.grandfatherName}`,
+                                  ].filter(Boolean).join(' ')
+
+                                  return (
+                                    <button
+                                      key={m.id}
+                                      type="button"
+                                      onClick={() => {
+                                        updateRow(row.id, 'anchorId', m.id)
+                                        updateRow(row.id, 'anchorName', m.fullNameArabic || m.fullName || '')
+                                        setRowPickerOpenId(null); setRowPickerSearch('')
+                                      }}
+                                      className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-sand-50 transition-colors text-right border-b border-sand-50 last:border-0"
+                                    >
+                                      <div className={cn(
+                                        'w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-bold shrink-0',
+                                        m.gender === 'MALE' ? 'bg-blue-400' : m.gender === 'FEMALE' ? 'bg-pink-400' : 'bg-slate-300'
+                                      )}>
+                                        {(m.fullNameArabic || m.fullName || '؟').charAt(0)}
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-xs font-semibold text-khartoum-900 truncate leading-tight">
+                                          {m.fullNameArabic || m.fullName}
+                                        </p>
+                                        {lin && <p className="text-[10px] text-khartoum-500 leading-tight">{lin}</p>}
+                                        <div className="flex gap-1 mt-0.5">
+                                          {m.birthYear && <span className="text-[10px] text-khartoum-400">{m.birthYear}م</span>}
+                                          {m.tribe && <span className="text-[10px] text-amber-600 before:content-['·'] before:mx-0.5">{m.tribe}</span>}
+                                        </div>
+                                      </div>
+                                      <span className={cn(
+                                        'text-[10px] font-semibold px-1.5 py-0.5 rounded shrink-0',
+                                        m.gender === 'MALE' ? 'bg-blue-50 text-blue-600' : m.gender === 'FEMALE' ? 'bg-pink-50 text-pink-600' : 'bg-slate-50 text-slate-400'
+                                      )}>
+                                        {m.gender === 'MALE' ? 'ذكر' : m.gender === 'FEMALE' ? 'أنثى' : '—'}
+                                      </span>
+                                    </button>
+                                  )
+                                })}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* "كـ" label */}
+                          <span className="text-[11px] text-khartoum-400 shrink-0">كـ</span>
+
+                          {/* Per-row relationship */}
+                          <select
+                            value={row.relType}
+                            onChange={e => updateRow(row.id, 'relType', e.target.value as RelationshipType | '')}
                             className={cn(
-                              'w-[26px] h-[26px] rounded-md text-[11px] font-bold border-2 transition-all',
-                              row.gender === g.v ? g.ac : 'border-sand-200 text-khartoum-300 hover:border-sand-300'
+                              'input py-1 text-xs',
+                              isRelOverride ? 'border-amber-400 bg-amber-50 text-amber-800 font-semibold' : 'text-khartoum-600'
                             )}
                           >
-                            {g.label}
-                          </button>
-                        ))}
-                      </div>
-
-                      {/* Birth year */}
-                      <input
-                        value={row.birthYear}
-                        onChange={e => updateRow(row.id, 'birthYear', e.target.value)}
-                        placeholder="—"
-                        type="number"
-                        min={1600}
-                        max={new Date().getFullYear()}
-                        className="input py-1.5 text-sm text-center w-full"
-                        dir="ltr"
-                      />
-
-                      {/* Per-row relationship type */}
-                      <div className="relative shrink-0">
-                        <select
-                          value={row.relType}
-                          onChange={e => updateRow(row.id, 'relType', e.target.value as RelationshipType | '')}
-                          className={cn(
-                            'w-full input py-1.5 text-xs appearance-none pr-1 pl-4 text-center',
-                            isOverridden
-                              ? 'border-amber-400 bg-amber-50 text-amber-800 font-semibold'
-                              : effectiveRel
-                              ? 'text-khartoum-700'
-                              : 'text-khartoum-300'
-                          )}
-                          title="تغيير العلاقة لهذا الفرد"
-                        >
-                          <option value="">
-                            {sharedRelType ? relLabel : 'اختر...'}
-                          </option>
-                          {REL_OPTIONS.map(opt => (
-                            <option key={opt.value} value={opt.value}>
-                              {opt.labelShort}
+                            <option value="">
+                              {sharedRelType
+                                ? `${relOpt?.labelShort ?? '—'} (افتراضي)`
+                                : 'اختر العلاقة...'}
                             </option>
-                          ))}
-                        </select>
-                        {isOverridden && (
-                          <span className="absolute left-1 top-1/2 -translate-y-1/2 text-[9px] text-amber-600 pointer-events-none">★</span>
-                        )}
-                      </div>
-
-                      {/* Remove */}
-                      <button
-                        type="button"
-                        onClick={() => removeRow(row.id)}
-                        disabled={rows.length <= 1}
-                        className={cn(
-                          'w-6 h-6 rounded-md flex items-center justify-center transition-colors shrink-0',
-                          rows.length <= 1
-                            ? 'text-sand-200 cursor-not-allowed'
-                            : 'text-khartoum-300 hover:bg-red-50 hover:text-red-500'
-                        )}
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                            {REL_OPTIONS.map(opt => (
+                              <option key={opt.value} value={opt.value}>
+                                {opt.labelFull}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
                     </div>
                   )
                 })}

@@ -25,8 +25,9 @@ const bulkMemberSchema = z.object({
     isAlive:          z.boolean().default(true),
     birthYear:        z.number().int().min(1600).max(new Date().getFullYear()).optional().nullable(),
     occupation:       z.string().optional().nullable(),
-    // Per-member relationship override — overrides the shared `relationshipType`
-    relationshipType: z.string().optional().nullable(),
+    // Per-member overrides
+    relationshipType: z.string().optional().nullable(), // overrides shared relationshipType
+    relativeOfId:     z.string().optional().nullable(), // overrides shared relativeOfId
   })).min(1).max(20),
 })
 
@@ -53,18 +54,20 @@ export async function POST(req: NextRequest) {
     })
     if (!tree) return NextResponse.json({ success: false, error: 'غير مصرّح أو الشجرة غير موجودة' }, { status: 403 })
 
-    // Resolve anchor member (used by all rows that don't override relativeOfId)
-    let relativeNeo4jId:    string | null = null
-    let relativePostgresId: string | null = null
-    if (data.relativeOfId) {
-      const relative = await prisma.treeMember.findUnique({ where: { id: data.relativeOfId } })
-      if (relative) {
-        relativeNeo4jId    = relative.neo4jPersonId
-        relativePostgresId = relative.id
-      }
-    }
+    // Pre-load all anchor members referenced by shared or per-row relativeOfId
+    const allAnchorIds = [
+      data.relativeOfId,
+      ...data.members.map(m => m.relativeOfId),
+    ].filter((id): id is string => !!id)
 
-    // Create all members sequentially to keep relationship logic correct
+    const anchorRows = allAnchorIds.length > 0
+      ? await prisma.treeMember.findMany({ where: { id: { in: allAnchorIds } } })
+      : []
+    const anchorMap = new Map(anchorRows.map(r => [r.id, r]))
+
+    const sharedAnchor = data.relativeOfId ? anchorMap.get(data.relativeOfId) ?? null : null
+
+    // Create all members
     const createdMembers = await Promise.all(
       data.members.map(async (m) => {
         const neo4jPersonId = `person-${uuid()}`
@@ -101,61 +104,44 @@ export async function POST(req: NextRequest) {
           tribe:          data.tribe || null,
         }).catch(err => console.warn('Neo4j createPerson failed:', err.message))
 
-        // Resolve per-member relationship type (falls back to shared default)
+        // Resolve per-member anchor and relationship type
+        const anchor  = (m.relativeOfId ? anchorMap.get(m.relativeOfId) : null) ?? sharedAnchor
         const relType = m.relationshipType ?? data.relationshipType
 
-        if (relativePostgresId && relativeNeo4jId && relType) {
+        if (anchor && relType) {
+          const anchorPostgresId = anchor.id
+          const anchorNeo4jId    = anchor.neo4jPersonId
+
           // ── PostgreSQL relationship (primary store) ───────────────────────
           if (relType === 'CHILD_OF') {
-            // new member IS a child of the anchor → anchor -PARENT_OF-> new
             await prisma.memberRelationship.upsert({
-              where: {
-                fromMemberId_toMemberId_type: {
-                  fromMemberId: relativePostgresId,
-                  toMemberId:   member.id,
-                  type:         'PARENT_OF',
-                },
-              },
-              create: { fromMemberId: relativePostgresId, toMemberId: member.id, type: 'PARENT_OF' },
+              where:  { fromMemberId_toMemberId_type: { fromMemberId: anchorPostgresId, toMemberId: member.id, type: 'PARENT_OF' } },
+              create: { fromMemberId: anchorPostgresId, toMemberId: member.id, type: 'PARENT_OF' },
               update: {},
             })
           } else if (relType === 'PARENT_OF') {
-            // new member IS a parent of the anchor → new -PARENT_OF-> anchor
             await prisma.memberRelationship.upsert({
-              where: {
-                fromMemberId_toMemberId_type: {
-                  fromMemberId: member.id,
-                  toMemberId:   relativePostgresId,
-                  type:         'PARENT_OF',
-                },
-              },
-              create: { fromMemberId: member.id, toMemberId: relativePostgresId, type: 'PARENT_OF' },
+              where:  { fromMemberId_toMemberId_type: { fromMemberId: member.id, toMemberId: anchorPostgresId, type: 'PARENT_OF' } },
+              create: { fromMemberId: member.id, toMemberId: anchorPostgresId, type: 'PARENT_OF' },
               update: {},
             })
           } else {
-            // SPOUSE_OF, SIBLING_OF, HALF_SIBLING_OF, etc.
             await prisma.memberRelationship.upsert({
-              where: {
-                fromMemberId_toMemberId_type: {
-                  fromMemberId: relativePostgresId,
-                  toMemberId:   member.id,
-                  type:         relType,
-                },
-              },
-              create: { fromMemberId: relativePostgresId, toMemberId: member.id, type: relType },
+              where:  { fromMemberId_toMemberId_type: { fromMemberId: anchorPostgresId, toMemberId: member.id, type: relType } },
+              create: { fromMemberId: anchorPostgresId, toMemberId: member.id, type: relType },
               update: {},
             })
           }
 
           // ── Neo4j mirror (non-blocking) ───────────────────────────────────
           if (relType === 'CHILD_OF') {
-            createRelationship(relativeNeo4jId, neo4jPersonId, 'PARENT_OF')
+            createRelationship(anchorNeo4jId, neo4jPersonId, 'PARENT_OF')
               .catch(err => console.warn('Neo4j rel failed:', err.message))
           } else if (relType === 'PARENT_OF') {
-            createRelationship(neo4jPersonId, relativeNeo4jId, 'PARENT_OF')
+            createRelationship(neo4jPersonId, anchorNeo4jId, 'PARENT_OF')
               .catch(err => console.warn('Neo4j rel failed:', err.message))
           } else {
-            createRelationship(relativeNeo4jId, neo4jPersonId, relType as any)
+            createRelationship(anchorNeo4jId, neo4jPersonId, relType as any)
               .catch(err => console.warn('Neo4j rel failed:', err.message))
           }
         }
