@@ -12,24 +12,47 @@ interface FamilyTreeCanvasProps {
   readOnly?:    boolean
 }
 
-// ── Card dimensions ───────────────────────────────────────────────────────────
-const CW  = 186   // card width
-const CH  = 98    // card height
-const CR  = 13    // corner radius
-const AVR = 27    // avatar circle radius
+// ── Card dimensions (portrait style, MyHeritage-inspired) ─────────────────────
+const CW  = 148   // card width
+const CH  = 178   // card height (portrait)
+const CR  = 14    // corner radius
+const AVR = 36    // avatar radius
 
 // ── Spacing ───────────────────────────────────────────────────────────────────
-const SP_GAP = 18   // gap between spouse cards
-const H_GAP  = 52   // horizontal gap between family units
-const V_STR  = 210  // vertical stride between generations (center-to-center)
+const SP_GAP = 20   // gap between spouse cards
+const H_GAP  = 56   // horizontal gap between family units
+const V_STR  = 240  // vertical stride between generations
 
-// D3 tree node allocation: room for one couple unit + gap
-const NS_W = CW * 2 + SP_GAP + H_GAP  // nodeSize width
-const NS_H = V_STR                      // nodeSize height
+const NS_W = CW * 2 + SP_GAP + H_GAP
+const NS_H = V_STR
 
 // ── Colours ───────────────────────────────────────────────────────────────────
-const CONN  = '#c8b89a'   // connector lines
-const C_W   = 2           // connector stroke-width
+const CONN  = '#b8a898'
+const C_W   = 2
+
+// Male palette
+const MALE_BG     = '#dbeafe'
+const MALE_BORDER = '#93c5fd'
+const MALE_ACCENT = '#2563eb'
+const MALE_AV_BG  = '#bfdbfe'
+const MALE_AV_FG  = '#1d4ed8'
+const MALE_TEXT   = '#1e3a5f'
+
+// Female palette
+const FEMALE_BG     = '#fce7f3'
+const FEMALE_BORDER = '#f9a8d4'
+const FEMALE_ACCENT = '#db2777'
+const FEMALE_AV_BG  = '#fbcfe8'
+const FEMALE_AV_FG  = '#9d174d'
+const FEMALE_TEXT   = '#5b1a33'
+
+// Deceased palette
+const DEAD_BG     = '#f1f5f9'
+const DEAD_BORDER = '#cbd5e1'
+const DEAD_ACCENT = '#94a3b8'
+const DEAD_AV_BG  = '#e2e8f0'
+const DEAD_AV_FG  = '#475569'
+const DEAD_TEXT   = '#334155'
 
 export function FamilyTreeCanvas({
   data, onNodeClick, onNodeAdd, language = 'ar', readOnly = false,
@@ -48,38 +71,51 @@ export function FamilyTreeCanvas({
     const W = svgRef.current.clientWidth  || 960
     const H = svgRef.current.clientHeight || 640
 
-    // ── Build hierarchy & layout ──────────────────────────────────────────────
+    // ── Defs: drop shadow filter ───────────────────────────────────────────
+    const defs = svg.append('defs')
+    const filter = defs.append('filter')
+      .attr('id', 'card-shadow')
+      .attr('x', '-20%').attr('y', '-20%')
+      .attr('width', '140%').attr('height', '150%')
+    filter.append('feDropShadow')
+      .attr('dx', 0).attr('dy', 3)
+      .attr('stdDeviation', 5)
+      .attr('flood-color', 'rgba(0,0,0,0.12)')
+
+    const filterSel = defs.append('filter')
+      .attr('id', 'card-shadow-selected')
+      .attr('x', '-20%').attr('y', '-20%')
+      .attr('width', '140%').attr('height', '150%')
+    filterSel.append('feDropShadow')
+      .attr('dx', 0).attr('dy', 4)
+      .attr('stdDeviation', 8)
+      .attr('flood-color', 'rgba(217,119,6,0.35)')
+
+    // ── Build hierarchy & layout ──────────────────────────────────────────
     const root = d3.hierarchy<TreeNode>(data, d => d.children)
     d3.tree<TreeNode>()
       .nodeSize([NS_W, NS_H])
-      .separation((a, b) => a.parent === b.parent ? 1 : 1.35)(root)
+      .separation((a, b) => a.parent === b.parent ? 1 : 1.3)(root)
 
     const allNodes = root.descendants()
     const xs = allNodes.map(n => n.x!)
     const tx = W / 2 - (Math.min(...xs) + Math.max(...xs)) / 2
-    const ty = 72
+    const ty = 80
 
-    // ── Root SVG group ────────────────────────────────────────────────────────
+    // ── Root SVG group ────────────────────────────────────────────────────
     const g = svg.append('g').attr('transform', `translate(${tx},${ty})`)
 
-    // ── Zoom ──────────────────────────────────────────────────────────────────
+    // ── Zoom ──────────────────────────────────────────────────────────────
     const zoom = d3.zoom<SVGSVGElement, unknown>()
-      .scaleExtent([0.1, 3])
+      .scaleExtent([0.08, 3])
       .on('zoom', e => g.attr('transform', e.transform.toString()))
     zoomRef.current = zoom
     svg.call(zoom)
     svg.call(zoom.transform, d3.zoomIdentity.translate(tx, ty))
 
-    // ── Helper: couple anchor X (connector origin from parent down) ───────────
     type HNode = d3.HierarchyPointNode<TreeNode>
-    function coupleAnchorX(d: HNode) {
-      // If node has a spouse, anchor is the midpoint of the couple unit
-      return d.data.spouses?.length
-        ? d.x   // node.x is already centered between couple (see card drawing below)
-        : d.x
-    }
 
-    // ── Connectors (family-tree step style) ───────────────────────────────────
+    // ── Connectors ────────────────────────────────────────────────────────
     const connLayer = g.append('g').attr('class', 'conn-layer')
 
     const byParent = new Map<HNode, HNode[]>()
@@ -91,19 +127,17 @@ export function FamilyTreeCanvas({
     })
 
     byParent.forEach((children, parent) => {
-      const px   = coupleAnchorX(parent)
-      const topY = parent.y + CH / 2        // bottom of parent card row
-      const botY = children[0].y - CH / 2   // top of children card row
-      const midY = topY + (botY - topY) * 0.45
+      const px   = parent.x
+      const topY = parent.y + CH / 2 + 4
+      const botY = children[0].y - CH / 2 - 4
+      const midY = topY + (botY - topY) * 0.5
 
-      // Vertical drop from parent/couple center
       connLayer.append('line')
         .attr('x1', px).attr('y1', topY)
         .attr('x2', px).attr('y2', midY)
         .attr('stroke', CONN).attr('stroke-width', C_W).attr('stroke-linecap', 'round')
 
       if (children.length > 1) {
-        // Horizontal bar spanning all siblings
         const minX = Math.min(...children.map(c => c.x))
         const maxX = Math.max(...children.map(c => c.x))
         connLayer.append('line')
@@ -112,7 +146,6 @@ export function FamilyTreeCanvas({
           .attr('stroke', CONN).attr('stroke-width', C_W).attr('stroke-linecap', 'round')
       }
 
-      // Vertical lines from bar down to each child
       children.forEach(child => {
         connLayer.append('line')
           .attr('x1', child.x).attr('y1', midY)
@@ -121,105 +154,116 @@ export function FamilyTreeCanvas({
       })
     })
 
-    // ── Card renderer ─────────────────────────────────────────────────────────
-    // ox = left edge of card relative to node center (d.x, d.y)
+    // ── Card renderer (portrait, MyHeritage-style) ─────────────────────────
+    // ox = left edge of card relative to node x; oy = card top = -CH/2
     function renderCard(el: SVGGElement, person: TreeNode, ox: number, isSelected: boolean) {
       const g        = d3.select(el)
       const isMale   = person.gender === 'MALE'
       const alive    = person.isAlive
-      const accent   = !alive ? '#94a3b8' : isMale ? '#3b82f6' : '#ec4899'
-      const bg       = isSelected ? '#fef9ec'
-                     : !alive     ? '#f8fafc'
-                     : isMale     ? '#eff6ff'
-                     :              '#fdf2f8'
-      const border   = isSelected ? '#d97706'
-                     : !alive     ? '#cbd5e1'
-                     : isMale     ? '#bfdbfe'
-                     :              '#fbcfe8'
+
+      const bg      = alive ? (isMale ? MALE_BG     : FEMALE_BG)     : DEAD_BG
+      const border  = alive ? (isMale ? MALE_BORDER  : FEMALE_BORDER) : DEAD_BORDER
+      const accent  = alive ? (isMale ? MALE_ACCENT  : FEMALE_ACCENT) : DEAD_ACCENT
+      const avBg    = alive ? (isMale ? MALE_AV_BG   : FEMALE_AV_BG)  : DEAD_AV_BG
+      const avFg    = alive ? (isMale ? MALE_AV_FG   : FEMALE_AV_FG)  : DEAD_AV_FG
+      const textClr = alive ? (isMale ? MALE_TEXT    : FEMALE_TEXT)   : DEAD_TEXT
+
       const name     = language === 'ar' ? (person.nameArabic || person.name) : person.name
       const initChar = (name || '؟').charAt(0).toUpperCase()
 
-      // Drop shadow
-      g.append('rect')
-        .attr('x', ox + 2).attr('y', -CH / 2 + 3)
-        .attr('width', CW).attr('height', CH).attr('rx', CR)
-        .attr('fill', 'rgba(0,0,0,0.08)')
-
-      // Card background
+      // Card shadow
       g.append('rect')
         .attr('x', ox).attr('y', -CH / 2)
         .attr('width', CW).attr('height', CH).attr('rx', CR)
         .attr('fill', bg)
-        .attr('stroke', border)
+        .attr('stroke', isSelected ? '#d97706' : border)
         .attr('stroke-width', isSelected ? 2.5 : 1.5)
+        .attr('filter', isSelected ? 'url(#card-shadow-selected)' : 'url(#card-shadow)')
 
-      // Left accent bar
+      // Top accent bar (full-width, rounded top)
       g.append('rect')
         .attr('x', ox).attr('y', -CH / 2)
-        .attr('width', 6).attr('height', CH).attr('rx', CR)
+        .attr('width', CW).attr('height', 7).attr('rx', CR)
         .attr('fill', accent)
 
-      // Avatar circle
-      const avCX = ox + 6 + AVR + 8
+      // Gender icon badge (top-right)
+      const badgeX = ox + CW - 18
+      const badgeY = -CH / 2 + 18
       g.append('circle')
-        .attr('cx', avCX).attr('cy', 0).attr('r', AVR)
-        .attr('fill', !alive ? '#e2e8f0' : isMale ? '#dbeafe' : '#fce7f3')
-        .attr('stroke', accent).attr('stroke-width', 2)
+        .attr('cx', badgeX).attr('cy', badgeY).attr('r', 10)
+        .attr('fill', 'white').attr('stroke', border).attr('stroke-width', 1)
+      g.append('text')
+        .attr('x', badgeX).attr('y', badgeY + 5)
+        .attr('text-anchor', 'middle')
+        .attr('font-size', 11)
+        .text(isMale ? '♂' : (person.gender === 'FEMALE' ? '♀' : ''))
+        .attr('fill', accent)
+
+      // Avatar circle (centered at top half)
+      const avCY = -CH / 2 + 22 + AVR
+      const avCX = ox + CW / 2
+      g.append('circle')
+        .attr('cx', avCX).attr('cy', avCY).attr('r', AVR + 3)
+        .attr('fill', 'white').attr('stroke', border).attr('stroke-width', 2)
+      g.append('circle')
+        .attr('cx', avCX).attr('cy', avCY).attr('r', AVR)
+        .attr('fill', avBg)
 
       // Avatar initial
       g.append('text')
-        .attr('x', avCX).attr('y', 8)
+        .attr('x', avCX).attr('y', avCY + 9)
         .attr('text-anchor', 'middle')
-        .attr('font-size', 21).attr('font-weight', '700')
+        .attr('font-size', 26).attr('font-weight', '800')
         .attr('font-family', "'Cairo', 'Tajawal', sans-serif")
-        .attr('fill', !alive ? '#64748b' : isMale ? '#1d4ed8' : '#be185d')
+        .attr('fill', avFg)
         .text(initChar)
 
-      // Text area
-      const textX  = ox + 6 + AVR * 2 + 18
-      const maxChr = Math.max(5, Math.floor((CW - (6 + AVR * 2 + 18) - 10) / 7.2))
-
-      // Name
+      // Name (centered, below avatar)
+      const nameY = avCY + AVR + 18
+      const maxChr = Math.max(6, Math.floor(CW / 8.5))
       g.append('text')
-        .attr('x', textX).attr('y', -22)
-        .attr('font-size', 12).attr('font-weight', '700')
+        .attr('x', avCX).attr('y', nameY)
+        .attr('text-anchor', 'middle')
+        .attr('font-size', 13).attr('font-weight', '700')
         .attr('font-family', "'Cairo', 'Tajawal', sans-serif")
-        .attr('fill', '#0f172a')
+        .attr('fill', textClr)
         .text(clip(name || 'مجهول', maxChr))
 
-      // Dates
+      // Dates row
       const dateStr = [
         person.birthYear ? `${person.birthYear}م` : '',
         !alive && person.deathYear ? `† ${person.deathYear}` : '',
       ].filter(Boolean).join('  ')
       if (dateStr) {
         g.append('text')
-          .attr('x', textX).attr('y', -5)
-          .attr('font-size', 10).attr('font-family', "'Cairo', sans-serif")
+          .attr('x', avCX).attr('y', nameY + 18)
+          .attr('text-anchor', 'middle')
+          .attr('font-size', 10.5).attr('font-family', "'Cairo', sans-serif")
           .attr('fill', '#64748b')
           .text(dateStr)
       }
 
-      // Tribe
+      // Tribe row
       if (person.tribe) {
         g.append('text')
-          .attr('x', textX).attr('y', 13)
+          .attr('x', avCX).attr('y', nameY + (dateStr ? 34 : 18))
+          .attr('text-anchor', 'middle')
           .attr('font-size', 9.5).attr('font-family', "'Cairo', sans-serif")
           .attr('fill', '#92400e')
-          .text(clip(person.tribe, maxChr + 3))
+          .text(clip(person.tribe, maxChr + 2))
       }
 
-      // Deceased dagger
+      // Deceased overlay cross mark
       if (!alive) {
         g.append('text')
-          .attr('x', ox + CW - 12).attr('y', -CH / 2 + 18)
+          .attr('x', ox + 14).attr('y', -CH / 2 + 20)
           .attr('text-anchor', 'middle')
-          .attr('font-size', 13).attr('fill', '#94a3b8')
+          .attr('font-size', 12).attr('fill', '#94a3b8')
           .text('†')
       }
     }
 
-    // ── Node groups ───────────────────────────────────────────────────────────
+    // ── Node groups ────────────────────────────────────────────────────────
     const nodeGs = g.append('g').attr('class', 'nodes-layer')
       .selectAll<SVGGElement, HNode>('.node')
       .data(allNodes)
@@ -228,41 +272,43 @@ export function FamilyTreeCanvas({
       .attr('transform', d => `translate(${d.x},${d.y})`)
       .style('cursor', 'pointer')
 
-    // ── Draw cards ────────────────────────────────────────────────────────────
+    // ── Draw cards ────────────────────────────────────────────────────────
     nodeGs.each(function(d) {
       const spouse    = d.data.spouses?.[0]
       const hasSpouse = !!spouse
+      const mainOX    = hasSpouse ? -(CW + SP_GAP / 2) : -CW / 2
 
-      // Center couple unit around node.x:
-      // total couple width = CW + SP_GAP + CW, so main card offset:
-      const mainOX = hasSpouse ? -(CW + SP_GAP / 2) : -CW / 2
-
-      // Main person card
       renderCard(this, d.data, mainOX, d.data.id === selectedId)
 
-      // Spouse card
       if (hasSpouse && spouse) {
         const spOX = mainOX + CW + SP_GAP
+
         renderCard(this, spouse, spOX, spouse.id === selectedId)
 
-        // Marriage connector (dashed line + ring)
-        const gSel   = d3.select(this)
-        const ringX  = mainOX + CW + SP_GAP / 2
+        // Marriage connector with heart icon
+        const gSel  = d3.select(this)
+        const linkX = mainOX + CW
+        const linkW = SP_GAP
+        const midX  = linkX + linkW / 2
+
+        // Horizontal dash
         gSel.append('line')
-          .attr('x1', mainOX + CW + 1).attr('y1', 0)
-          .attr('x2', spOX - 1).attr('y2', 0)
+          .attr('x1', linkX).attr('y1', 0)
+          .attr('x2', spOX) .attr('y2', 0)
           .attr('stroke', '#f59e0b').attr('stroke-width', 1.5)
-          .attr('stroke-dasharray', '3,2')
+          .attr('stroke-dasharray', '4,2')
+
+        // Heart badge
         gSel.append('circle')
-          .attr('cx', ringX).attr('cy', 0).attr('r', 8)
+          .attr('cx', midX).attr('cy', 0).attr('r', 9)
           .attr('fill', '#fef3c7').attr('stroke', '#f59e0b').attr('stroke-width', 1.5)
         gSel.append('text')
-          .attr('x', ringX).attr('y', 5)
+          .attr('x', midX).attr('y', 4.5)
           .attr('text-anchor', 'middle')
           .attr('font-size', 10).attr('fill', '#d97706')
           .text('♥')
 
-        // Spouse card click
+        // Invisible click target for spouse card
         gSel.append('rect')
           .attr('x', spOX).attr('y', -CH / 2)
           .attr('width', CW).attr('height', CH).attr('rx', CR)
@@ -275,33 +321,37 @@ export function FamilyTreeCanvas({
           })
       }
 
-      // Add-relative button (shown on hover)
+      // Add-relative button (bottom center, visible on hover)
       if (!readOnly) {
-        const btn = d3.select(this).append('g')
+        const btnY = CH / 2 + 20
+        const btn  = d3.select(this).append('g')
           .attr('class', 'add-btn')
-          .attr('transform', `translate(0,${CH / 2 + 18})`)
+          .attr('transform', `translate(0,${btnY})`)
           .style('opacity', 0)
           .style('cursor', 'pointer')
           .on('click', ev => { ev.stopPropagation(); onNodeAdd?.(d.data) })
 
         btn.append('circle')
-          .attr('r', 14)
+          .attr('r', 15)
           .attr('fill', '#d4922d').attr('stroke', 'white').attr('stroke-width', 2.5)
+          .attr('filter', 'url(#card-shadow)')
         btn.append('text')
-          .attr('text-anchor', 'middle').attr('y', 5.5)
-          .attr('font-size', 18).attr('font-weight', '700')
+          .attr('text-anchor', 'middle').attr('y', 6)
+          .attr('font-size', 19).attr('font-weight', '700')
           .attr('fill', 'white')
           .text('+')
       }
     })
 
-    // ── Hover: show/hide add button + tooltip ─────────────────────────────────
+    // ── Hover events ───────────────────────────────────────────────────────
     nodeGs
       .on('mouseenter.btn', function() {
-        d3.select(this).select('.add-btn').style('opacity', 1)
+        d3.select(this).select('.add-btn')
+          .transition().duration(150).style('opacity', 1)
       })
       .on('mouseleave.btn', function() {
-        d3.select(this).select('.add-btn').style('opacity', 0)
+        d3.select(this).select('.add-btn')
+          .transition().duration(150).style('opacity', 0)
       })
       .on('mouseenter', (ev, d) => {
         const rect = svgRef.current!.getBoundingClientRect()
@@ -328,11 +378,11 @@ export function FamilyTreeCanvas({
 
   function zoomBy(k: number) {
     if (!svgRef.current || !zoomRef.current) return
-    d3.select(svgRef.current).transition().duration(240).call(zoomRef.current.scaleBy, k)
+    d3.select(svgRef.current).transition().duration(220).call(zoomRef.current.scaleBy, k)
   }
   function resetView() {
     if (!svgRef.current || !zoomRef.current) return
-    d3.select(svgRef.current).transition().duration(340)
+    d3.select(svgRef.current).transition().duration(320)
       .call(zoomRef.current.transform, d3.zoomIdentity)
   }
 
@@ -341,40 +391,59 @@ export function FamilyTreeCanvas({
       ref={containerRef}
       className="relative w-full h-full overflow-hidden select-none"
       style={{
-        background: '#f6f1e8',
-        backgroundImage: 'radial-gradient(circle, #d3c8b0 1.2px, transparent 1.2px)',
-        backgroundSize: '26px 26px',
+        background: '#f0ece4',
+        backgroundImage: 'radial-gradient(circle, #c9bfac 1px, transparent 1px)',
+        backgroundSize: '28px 28px',
       }}
     >
       <svg ref={svgRef} className="w-full h-full" style={{ minHeight: 500 }} />
 
-      {/* ── Tooltip ─────────────────────────────────────────────────────────── */}
+      {/* ── Tooltip ──────────────────────────────────────────────────────── */}
       {tooltip && (
         <div
-          className="absolute z-30 pointer-events-none bg-white rounded-2xl shadow-xl border border-sand-100 px-4 py-3 min-w-[170px] animate-fade-in"
-          style={{ left: tooltip.x + 16, top: tooltip.y + 14, maxWidth: 250 }}
+          className="absolute z-30 pointer-events-none bg-white rounded-2xl shadow-2xl border border-sand-100 px-4 py-3.5 min-w-[180px] animate-fade-in"
+          style={{ left: tooltip.x + 18, top: tooltip.y + 14, maxWidth: 260 }}
         >
-          <p className="font-bold text-sm text-khartoum-900 leading-snug">
-            {language === 'ar'
-              ? tooltip.node.nameArabic || tooltip.node.name
-              : tooltip.node.name}
-          </p>
+          <div className="flex items-center gap-2 mb-2">
+            <div
+              className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0"
+              style={{
+                background: tooltip.node.isAlive
+                  ? tooltip.node.gender === 'MALE' ? MALE_ACCENT : FEMALE_ACCENT
+                  : DEAD_ACCENT,
+              }}
+            >
+              {(language === 'ar'
+                ? tooltip.node.nameArabic || tooltip.node.name
+                : tooltip.node.name
+              )?.charAt(0) ?? '؟'}
+            </div>
+            <p className="font-bold text-sm text-khartoum-900 leading-snug">
+              {language === 'ar'
+                ? tooltip.node.nameArabic || tooltip.node.name
+                : tooltip.node.name}
+            </p>
+          </div>
           {tooltip.node.tribe && (
-            <p className="text-xs text-amber-700 mt-1">قبيلة {tooltip.node.tribe}</p>
+            <p className="text-xs text-amber-700 flex items-center gap-1">
+              <span className="opacity-60">قبيلة</span> {tooltip.node.tribe}
+            </p>
           )}
           {(tooltip.node.birthYear || tooltip.node.deathYear) && (
-            <p className="text-xs text-khartoum-400 mt-0.5">
+            <p className="text-xs text-khartoum-400 mt-1">
               {tooltip.node.birthYear ? `${tooltip.node.birthYear}م` : ''}
-              {tooltip.node.deathYear ? ` — ${tooltip.node.deathYear}` : ''}
+              {tooltip.node.deathYear ? ` — ${tooltip.node.deathYear}م` : ''}
             </p>
           )}
           {!tooltip.node.isAlive && (
-            <p className="text-xs text-khartoum-400 mt-0.5">† رحل إلى رحمة الله</p>
+            <p className="text-xs text-khartoum-400 mt-0.5 flex items-center gap-1">
+              <span>†</span> رحل إلى رحمة الله
+            </p>
           )}
         </div>
       )}
 
-      {/* ── Zoom controls ───────────────────────────────────────────────────── */}
+      {/* ── Zoom controls ────────────────────────────────────────────────── */}
       <div className="absolute bottom-6 right-5 flex flex-col gap-1.5" dir="ltr">
         {([
           { label: '+', fn: () => zoomBy(1.3),  title: 'تكبير' },
@@ -385,23 +454,23 @@ export function FamilyTreeCanvas({
             key={b.label}
             onClick={b.fn}
             title={b.title}
-            className="w-9 h-9 rounded-xl bg-white/90 backdrop-blur-sm border border-sand-200 shadow-md flex items-center justify-center text-khartoum-600 hover:bg-white hover:shadow-lg font-bold text-base transition-all"
+            className="w-10 h-10 rounded-xl bg-white/95 backdrop-blur-sm border border-sand-200 shadow-md flex items-center justify-center text-khartoum-600 hover:bg-white hover:shadow-lg font-bold text-base transition-all"
           >
             {b.label}
           </button>
         ))}
       </div>
 
-      {/* ── Legend ──────────────────────────────────────────────────────────── */}
+      {/* ── Legend ───────────────────────────────────────────────────────── */}
       <div
-        className="absolute top-4 left-4 bg-white/90 backdrop-blur-sm rounded-xl px-3 py-2.5 border border-sand-100 shadow-md space-y-1.5"
+        className="absolute top-4 left-4 bg-white/95 backdrop-blur-sm rounded-xl px-3 py-2.5 border border-sand-100 shadow-md space-y-1.5"
         dir="rtl"
       >
         {([
-          { color: '#3b82f6', label: 'ذكر'   },
-          { color: '#ec4899', label: 'أنثى'  },
-          { color: '#94a3b8', label: 'متوفى' },
-          { color: '#f59e0b', label: 'زواج'  },
+          { color: MALE_ACCENT,   label: 'ذكر'   },
+          { color: FEMALE_ACCENT, label: 'أنثى'  },
+          { color: DEAD_ACCENT,   label: 'متوفى' },
+          { color: '#f59e0b',     label: 'زواج'  },
         ]).map(({ color, label }) => (
           <div key={label} className="flex items-center gap-2">
             <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: color }} />

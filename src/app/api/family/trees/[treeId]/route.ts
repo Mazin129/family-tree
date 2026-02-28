@@ -151,6 +151,49 @@ async function buildFlatVisualization(treeId: string) {
     }
   }
 
+  // ── Co-parent normalization ────────────────────────────────────────────────
+  // When two people are both PARENT_OF the same child (e.g. a mother added
+  // after the father), pick ONE as the "primary" parent, merge all children
+  // under them, clear the secondary's children, and link them as spouses.
+  // This prevents the secondary becoming a separate root that hides the others.
+  const processedPairs = new Set<string>()
+  for (const [parentAId, childrenA] of Array.from(childMap.entries())) {
+    for (const [parentBId, childrenB] of Array.from(childMap.entries())) {
+      if (parentAId === parentBId) continue
+      const pairKey = [parentAId, parentBId].sort().join('|')
+      if (processedPairs.has(pairKey)) continue
+      const sharedChildren = childrenA.filter(c => childrenB.includes(c))
+      if (sharedChildren.length === 0) continue
+      processedPairs.add(pairKey)
+
+      const memberA = memberById.get(parentAId)
+      const memberB = memberById.get(parentBId)
+
+      // Primary = male > more-children > earlier in DB
+      let primaryId   = parentAId
+      let secondaryId = parentBId
+      if (memberA?.gender === 'FEMALE' && memberB?.gender !== 'FEMALE') {
+        primaryId = parentBId; secondaryId = parentAId
+      } else if (childrenB.length > childrenA.length) {
+        primaryId = parentBId; secondaryId = parentAId
+      }
+
+      // Merge all children under primary
+      const primChildren = childMap.get(primaryId)   ?? []
+      const secChildren  = childMap.get(secondaryId) ?? []
+      childMap.set(primaryId, [...new Set([...primChildren, ...secChildren])])
+      // Secondary loses all children that are now under primary
+      const newSecChildren = secChildren.filter(c => !childMap.get(primaryId)!.includes(c))
+      childMap.set(secondaryId, newSecChildren)
+
+      // Add bidirectional virtual spouse link if not already recorded
+      const pSpouses = spouseMap.get(primaryId) ?? []
+      if (!pSpouses.includes(secondaryId)) { pSpouses.push(secondaryId); spouseMap.set(primaryId, pSpouses) }
+      const sSpouses = spouseMap.get(secondaryId) ?? []
+      if (!sSpouses.includes(primaryId)) { sSpouses.push(primaryId); spouseMap.set(secondaryId, sSpouses) }
+    }
+  }
+
   // IDs that appear as children (have a parent in this tree)
   const hasParentSet = new Set<string>()
   for (const kids of childMap.values()) {
