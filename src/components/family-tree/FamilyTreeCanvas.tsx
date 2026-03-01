@@ -4,11 +4,14 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import * as d3 from 'd3'
 import type { TreeNode } from '@/types'
 import { tatweelName } from '@/lib/utils/arabic'
+import { TreePine } from 'lucide-react'
 
 interface FamilyTreeCanvasProps {
   data:         TreeNode
   onNodeClick?: (node: TreeNode) => void
   onNodeAdd?:   (node: TreeNode) => void
+  /** When provided, hover tooltip shows "View subtree" and this is called when user clicks it */
+  onViewSubtree?: (node: TreeNode) => void
   language?:    'ar' | 'en'
   readOnly?:    boolean
 }
@@ -55,12 +58,15 @@ const DEAD_AV_BG  = '#e2e8f0'
 const DEAD_AV_FG  = '#475569'
 const DEAD_TEXT   = '#334155'
 
+const TOOLTIP_HIDE_DELAY_MS = 400
+
 export function FamilyTreeCanvas({
-  data, onNodeClick, onNodeAdd, language = 'ar', readOnly = false,
+  data, onNodeClick, onNodeAdd, onViewSubtree, language = 'ar', readOnly = false,
 }: FamilyTreeCanvasProps) {
   const svgRef       = useRef<SVGSVGElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const zoomRef      = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null)
+  const hideTooltipRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [tooltip,    setTooltip]    = useState<{ x: number; y: number; node: TreeNode } | null>(null)
 
@@ -338,10 +344,16 @@ export function FamilyTreeCanvas({
           .transition().duration(150).style('opacity', 0)
       })
       .on('mouseenter', (ev, d) => {
+        if (hideTooltipRef.current) {
+          clearTimeout(hideTooltipRef.current)
+          hideTooltipRef.current = null
+        }
         const rect = svgRef.current!.getBoundingClientRect()
         setTooltip({ x: ev.clientX - rect.left, y: ev.clientY - rect.top, node: d.data })
       })
-      .on('mouseleave', () => setTooltip(null))
+      .on('mouseleave', () => {
+        hideTooltipRef.current = setTimeout(() => setTooltip(null), TOOLTIP_HIDE_DELAY_MS)
+      })
       .on('click', (ev, d) => {
         ev.stopPropagation()
         setSelectedId(d.data.id)
@@ -349,7 +361,7 @@ export function FamilyTreeCanvas({
       })
 
     svg.on('click', () => { setSelectedId(null); setTooltip(null) })
-  }, [data, selectedId, language, readOnly, onNodeClick, onNodeAdd])
+  }, [data, selectedId, language, readOnly, onNodeClick, onNodeAdd, onViewSubtree])
 
   useEffect(() => { draw() }, [draw])
 
@@ -377,47 +389,36 @@ export function FamilyTreeCanvas({
     >
       <svg ref={svgRef} className="w-full h-full" style={{ minHeight: 500 }} />
 
-      {/* ── Tooltip ──────────────────────────────────────────────────────── */}
+      {/* ── Tooltip (MyHeritage-style: view subtree for person) ────────────── */}
       {tooltip && (
         <div
-          className="absolute z-30 pointer-events-none bg-white rounded-2xl shadow-2xl border border-sand-100 px-4 py-3.5 min-w-[180px] animate-fade-in"
-          style={{ left: tooltip.x + 18, top: tooltip.y + 14, maxWidth: 260 }}
+          className="absolute z-30 bg-white rounded-2xl shadow-2xl border border-sand-100 px-4 py-3.5 min-w-[200px] animate-fade-in pointer-events-auto"
+          style={{ left: tooltip.x + 18, top: tooltip.y + 14, maxWidth: 280 }}
+          onMouseEnter={() => {
+            if (hideTooltipRef.current) {
+              clearTimeout(hideTooltipRef.current)
+              hideTooltipRef.current = null
+            }
+          }}
+          onMouseLeave={() => setTooltip(null)}
         >
-          <div className="flex items-center gap-2 mb-2">
-            <div
-              className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0"
-              style={{
-                background: tooltip.node.isAlive
-                  ? tooltip.node.gender === 'MALE' ? MALE_ACCENT : FEMALE_ACCENT
-                  : DEAD_ACCENT,
+          <p className="text-sm text-khartoum-700 leading-snug mb-3" dir="rtl">
+            {language === 'ar'
+              ? `إضغط لعرض فرع الشجره التابع ل ${tatweelName(tooltip.node.nameArabic || tooltip.node.name || '', 2)}`
+              : `Click to view the family tree branch belonging to ${tooltip.node.name || 'this person'}`}
+          </p>
+          {onViewSubtree && (
+            <button
+              type="button"
+              onClick={() => {
+                onViewSubtree(tooltip.node)
+                setTooltip(null)
               }}
+              className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-nile-100 hover:bg-nile-200 text-nile-800 font-medium text-sm transition-colors"
             >
-              {(language === 'ar'
-                ? (tooltip.node.nameArabic || tooltip.node.name)
-                : tooltip.node.name
-              )?.charAt(0) ?? '؟'}
-            </div>
-            <p className="font-bold text-sm text-khartoum-900 leading-snug">
-              {language === 'ar'
-                ? tatweelName(tooltip.node.nameArabic || tooltip.node.name || '', 2)
-                : tooltip.node.name}
-            </p>
-          </div>
-          {tooltip.node.tribe && (
-            <p className="text-xs text-amber-700 flex items-center gap-1">
-              <span className="opacity-60">قبيلة</span> {tooltip.node.tribe}
-            </p>
-          )}
-          {(tooltip.node.birthYear || tooltip.node.deathYear) && (
-            <p className="text-xs text-khartoum-400 mt-1">
-              {tooltip.node.birthYear ? `${tooltip.node.birthYear}م` : ''}
-              {tooltip.node.deathYear ? ` — ${tooltip.node.deathYear}م` : ''}
-            </p>
-          )}
-          {!tooltip.node.isAlive && (
-            <p className="text-xs text-khartoum-400 mt-0.5 flex items-center gap-1">
-              <span>†</span> رحل إلى رحمة الله
-            </p>
+              <TreePine className="w-4 h-4" />
+              {language === 'ar' ? 'عرض فرع الشجرة' : 'View tree branch'}
+            </button>
           )}
         </div>
       )}

@@ -34,6 +34,7 @@ export default function TreeViewPage() {
   const [addRelativeTo,  setAddRelativeTo]  = useState<TreeMember | null>(null)
   const [addParentHint,  setAddParentHint]  = useState<'father' | 'mother' | null>(null)
   const [activeTab,      setActiveTab]      = useState<Tab>('tree')
+  const [subtreeRoot,    setSubtreeRoot]    = useState<TreeNode | null>(null)
   const [loading,        setLoading]        = useState(true)
 
   const fetchTree = useCallback(async () => {
@@ -76,6 +77,10 @@ export default function TreeViewPage() {
   function handleNodeAdd(node: TreeNode) {
     const member = members.find(m => m.id === node.postgresId || m.neo4jPersonId === node.id)
     if (member) { setAddRelativeTo(member); setShowAddModal(true) }
+  }
+
+  function handleViewSubtree(node: TreeNode) {
+    setSubtreeRoot(node)
   }
 
   async function handleDeleteMember(memberId: string) {
@@ -200,12 +205,34 @@ export default function TreeViewPage() {
 
           {activeTab === 'tree' && (
             treeData
-              ? <FamilyTreeCanvas
-                  data={treeData}
-                  onNodeClick={handleNodeClick}
-                  onNodeAdd={handleNodeAdd}
-                  language="ar"
-                />
+              ? (
+                <div className="relative w-full h-full flex flex-col">
+                  {subtreeRoot && (
+                    <div className="shrink-0 flex items-center gap-2 px-4 py-2 bg-white/95 backdrop-blur-sm border-b border-sand-100" dir="rtl">
+                      <button
+                        type="button"
+                        onClick={() => setSubtreeRoot(null)}
+                        className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-sm font-medium text-khartoum-600 hover:bg-sand-100 transition-colors"
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                        العودة للشجرة الكاملة
+                      </button>
+                      <span className="text-xs text-khartoum-400">
+                        عرض فرع: {subtreeRoot.nameArabic || subtreeRoot.name}
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex-1 min-h-0">
+                    <FamilyTreeCanvas
+                      data={subtreeRoot ?? treeData}
+                      onNodeClick={handleNodeClick}
+                      onNodeAdd={handleNodeAdd}
+                      onViewSubtree={handleViewSubtree}
+                      language="ar"
+                    />
+                  </div>
+                </div>
+              )
               : <EmptyTreeState onAdd={() => setShowAddModal(true)} />
           )}
 
