@@ -375,11 +375,6 @@ export function FamilyTreeCanvas({
       ref={containerRef}
       className="relative w-full h-full overflow-hidden select-none tree-canvas-bg"
     >
-      {/* Nile river flowing divider at bottom of tree area */}
-      <div
-        className="absolute bottom-0 left-0 right-0 h-1 z-10 pointer-events-none divider-nile rounded-b-lg"
-        aria-hidden
-      />
       <svg ref={svgRef} className="w-full h-full" style={{ minHeight: 500 }} />
 
       {/* ── Tooltip ──────────────────────────────────────────────────────── */}
