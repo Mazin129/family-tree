@@ -83,6 +83,7 @@ export const FamilyTreeCanvas = forwardRef<FamilyTreeCanvasHandle, FamilyTreeCan
       setTooltip(null)
       setIsExporting(true)
       try {
+        await new Promise((r) => setTimeout(r, 300))
         const { jsPDF } = await import('jspdf')
         let imgData: string
         let cw: number
@@ -96,15 +97,9 @@ export const FamilyTreeCanvas = forwardRef<FamilyTreeCanvasHandle, FamilyTreeCan
           const clone = svgEl.cloneNode(true) as SVGSVGElement
           clone.setAttribute('width', String(w))
           clone.setAttribute('height', String(h))
+          clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
           clone.querySelectorAll('image').forEach((el) => el.remove())
           const svgString = new XMLSerializer().serializeToString(clone)
-          const dataUrl = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svgString)))}`
-          const img = new Image()
-          await new Promise<void>((resolve, reject) => {
-            img.onload = () => resolve()
-            img.onerror = () => reject(new Error('SVG load failed'))
-            img.src = dataUrl
-          })
           const canvas = document.createElement('canvas')
           canvas.width = w * scale
           canvas.height = h * scale
@@ -112,8 +107,14 @@ export const FamilyTreeCanvas = forwardRef<FamilyTreeCanvasHandle, FamilyTreeCan
           if (!ctx) throw new Error('No canvas context')
           ctx.fillStyle = '#f5f0e8'
           ctx.fillRect(0, 0, canvas.width, canvas.height)
-          ctx.scale(scale, scale)
-          ctx.drawImage(img, 0, 0, w, h)
+          const Canvg = (await import('canvg')).default
+          const v = Canvg.fromString(ctx, svgString, {
+            ignoreClear: true,
+            scaleWidth: canvas.width,
+            scaleHeight: canvas.height,
+            ignoreAnimation: true,
+          })
+          await v.render()
           imgData = canvas.toDataURL('image/png')
           cw = canvas.width
           ch = canvas.height
@@ -139,7 +140,9 @@ export const FamilyTreeCanvas = forwardRef<FamilyTreeCanvasHandle, FamilyTreeCan
         const pageW = pdf.internal.pageSize.getWidth()
         const pageH = pdf.internal.pageSize.getHeight()
         const margin = 10
-        const titleH = treeName ? 12 : 0
+        // jsPDF default font does not support Arabic; only add title if Latin-only to avoid corruption
+        const isLatinOnly = treeName ? /^[\x00-\x7F\s]*$/.test(treeName) : false
+        const titleH = isLatinOnly && treeName ? 12 : 0
         const contentW = pageW - 2 * margin
         const contentH = pageH - 2 * margin - titleH
         const imgRatio = cw / ch
@@ -150,13 +153,14 @@ export const FamilyTreeCanvas = forwardRef<FamilyTreeCanvasHandle, FamilyTreeCan
           imgW = contentH * imgRatio
         }
         const imgY = margin + titleH
-        if (treeName) {
+        if (isLatinOnly && treeName) {
           pdf.setFontSize(14)
           pdf.setFont('helvetica', 'bold')
           pdf.text(treeName, margin, margin + 6)
         }
         pdf.addImage(imgData, 'PNG', margin, imgY, imgW, imgH)
-        const safeName = (treeName || 'family-tree').replace(/[^\w\u0600-\u06FF\s-]/g, '').trim() || 'family-tree'
+        // Latin-only filename to avoid encoding errors when saving
+        const safeName = 'family-tree-' + Date.now()
         pdf.save(`${safeName}.pdf`)
       } finally {
         setIsExporting(false)
