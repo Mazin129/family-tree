@@ -11,7 +11,7 @@ import { ShareModal }        from '@/components/family-tree/ShareModal'
 import { AIInsightsPanel }   from '@/components/ai/AIInsightsPanel'
 import { toast }             from 'sonner'
 import {
-  TreePine, Plus, Settings, Share2, FileDown,
+  TreePine, Plus, Settings, Share2,
   Users, Sparkles, ChevronLeft, X, UserCircle2, UsersRound,
 } from 'lucide-react'
 import type { TreeNode, TreeMember, FamilyTree } from '@/types'
@@ -157,16 +157,6 @@ export default function TreeViewPage() {
           >
             <Plus className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">إضافة فرد</span>
-          </button>
-          <button
-            title="طباعة / حفظ كـ PDF"
-            onClick={() => {
-              window.open(`/tree/${treeId}/print`, '_blank', 'noopener,noreferrer')
-              toast.success('افتحت صفحة الطباعة — استخدم «طباعة / حفظ كـ PDF» ثم اختر الحفظ كـ PDF')
-            }}
-            className="w-9 h-9 rounded-xl border border-sand-200 flex items-center justify-center hover:bg-sand-50 transition-colors"
-          >
-            <FileDown className="w-4 h-4 text-khartoum-500" />
           </button>
           <button
             title="مشاركة الشجرة"
