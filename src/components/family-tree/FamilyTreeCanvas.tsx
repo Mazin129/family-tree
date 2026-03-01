@@ -85,12 +85,11 @@ export const FamilyTreeCanvas = forwardRef<FamilyTreeCanvasHandle, FamilyTreeCan
       try {
         await new Promise((r) => setTimeout(r, 400))
         const { jsPDF } = await import('jspdf')
-        let imgData: string
-        let cw: number
-        let ch: number
 
-        const useHtml2Canvas = async (): Promise<boolean> => {
-          if (!container) return false
+        type CaptureResult = { imgData: string; cw: number; ch: number } | null
+
+        const useHtml2Canvas = async (): Promise<CaptureResult> => {
+          if (!container) return null
           try {
             const html2canvas = (await import('html2canvas')).default
             const canvas = await html2canvas(container, {
@@ -102,19 +101,16 @@ export const FamilyTreeCanvas = forwardRef<FamilyTreeCanvasHandle, FamilyTreeCan
             })
             const data = canvas.toDataURL('image/png')
             if (data && data.length > 500) {
-              imgData = data
-              cw = canvas.width
-              ch = canvas.height
-              return true
+              return { imgData: data, cw: canvas.width, ch: canvas.height }
             }
           } catch {
             // ignore
           }
-          return false
+          return null
         }
 
-        const useSvgImage = async (): Promise<boolean> => {
-          if (!svgEl) return false
+        const useSvgImage = async (): Promise<CaptureResult> => {
+          if (!svgEl) return null
           try {
             const w = Math.max(svgEl.clientWidth || 960, 400)
             const h = Math.max(svgEl.clientHeight || 640, 300)
@@ -144,23 +140,22 @@ export const FamilyTreeCanvas = forwardRef<FamilyTreeCanvasHandle, FamilyTreeCan
             canvas.width = w * scale
             canvas.height = h * scale
             const ctx = canvas.getContext('2d')
-            if (!ctx) return false
+            if (!ctx) return null
             ctx.fillStyle = '#f5f0e8'
             ctx.fillRect(0, 0, canvas.width, canvas.height)
             ctx.scale(scale, scale)
             ctx.drawImage(img, 0, 0, w, h)
-            imgData = canvas.toDataURL('image/png')
-            if (!imgData || imgData.length < 100) return false
-            cw = canvas.width
-            ch = canvas.height
-            return true
+            const imgData = canvas.toDataURL('image/png')
+            if (!imgData || imgData.length < 100) return null
+            return { imgData, cw: canvas.width, ch: canvas.height }
           } catch {
-            return false
+            return null
           }
         }
 
-        const ok = await useHtml2Canvas() || (await useSvgImage())
-        if (!ok || !imgData) throw new Error('Export failed')
+        const result = (await useHtml2Canvas()) ?? (await useSvgImage())
+        if (!result) throw new Error('Export failed')
+        const { imgData, cw, ch } = result
 
         const pdf = new jsPDF({
           orientation: cw > ch ? 'landscape' : 'portrait',
