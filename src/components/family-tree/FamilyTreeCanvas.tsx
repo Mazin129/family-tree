@@ -1,14 +1,10 @@
 'use client'
 
-import { useEffect, useRef, useState, useCallback, forwardRef, useImperativeHandle } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import * as d3 from 'd3'
 import type { TreeNode } from '@/types'
 import { tatweelName } from '@/lib/utils/arabic'
 import { TreePine } from 'lucide-react'
-
-export interface FamilyTreeCanvasHandle {
-  exportToPdf: (treeName?: string) => Promise<void>
-}
 
 interface FamilyTreeCanvasProps {
   data:         TreeNode
@@ -64,134 +60,15 @@ const DEAD_TEXT   = '#334155'
 
 const TOOLTIP_HIDE_DELAY_MS = 400
 
-export const FamilyTreeCanvas = forwardRef<FamilyTreeCanvasHandle, FamilyTreeCanvasProps>(function FamilyTreeCanvas({
+export function FamilyTreeCanvas({
   data, onNodeClick, onNodeAdd, onViewSubtree, language = 'ar', readOnly = false,
-}, ref) {
+}: FamilyTreeCanvasProps) {
   const svgRef       = useRef<SVGSVGElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const zoomRef      = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null)
   const hideTooltipRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [tooltip,    setTooltip]    = useState<{ x: number; y: number; node: TreeNode } | null>(null)
-  const [isExporting, setIsExporting] = useState(false)
-
-  useImperativeHandle(ref, () => ({
-    async exportToPdf(treeName?: string) {
-      const svgEl = svgRef.current
-      const container = containerRef.current
-      if (!svgEl && !container) return
-      setTooltip(null)
-      setIsExporting(true)
-      try {
-        await new Promise((r) => setTimeout(r, 400))
-        const { jsPDF } = await import('jspdf')
-
-        type CaptureResult = { imgData: string; cw: number; ch: number } | null
-
-        const useHtml2Canvas = async (): Promise<CaptureResult> => {
-          if (!container) return null
-          try {
-            const html2canvas = (await import('html2canvas')).default
-            const canvas = await html2canvas(container, {
-              backgroundColor: '#f5f0e8',
-              scale: 2,
-              useCORS: true,
-              logging: false,
-              allowTaint: true,
-            })
-            const data = canvas.toDataURL('image/png')
-            if (data && data.length > 500) {
-              return { imgData: data, cw: canvas.width, ch: canvas.height }
-            }
-          } catch {
-            // ignore
-          }
-          return null
-        }
-
-        const useSvgImage = async (): Promise<CaptureResult> => {
-          if (!svgEl) return null
-          try {
-            const w = Math.max(svgEl.clientWidth || 960, 400)
-            const h = Math.max(svgEl.clientHeight || 640, 300)
-            const scale = 2
-            const clone = svgEl.cloneNode(true) as SVGSVGElement
-            clone.setAttribute('width', String(w))
-            clone.setAttribute('height', String(h))
-            clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
-            clone.querySelectorAll('image').forEach((el) => el.remove())
-            clone.querySelectorAll('[filter]').forEach((el) => el.removeAttribute('filter'))
-            const svgString = new XMLSerializer().serializeToString(clone)
-            const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' })
-            const url = URL.createObjectURL(blob)
-            const img = new Image()
-            await new Promise<void>((resolve, reject) => {
-              img.onload = () => {
-                URL.revokeObjectURL(url)
-                resolve()
-              }
-              img.onerror = () => {
-                URL.revokeObjectURL(url)
-                reject(new Error('SVG load failed'))
-              }
-              img.src = url
-            })
-            const canvas = document.createElement('canvas')
-            canvas.width = w * scale
-            canvas.height = h * scale
-            const ctx = canvas.getContext('2d')
-            if (!ctx) return null
-            ctx.fillStyle = '#f5f0e8'
-            ctx.fillRect(0, 0, canvas.width, canvas.height)
-            ctx.scale(scale, scale)
-            ctx.drawImage(img, 0, 0, w, h)
-            const imgData = canvas.toDataURL('image/png')
-            if (!imgData || imgData.length < 100) return null
-            return { imgData, cw: canvas.width, ch: canvas.height }
-          } catch {
-            return null
-          }
-        }
-
-        const result = (await useHtml2Canvas()) ?? (await useSvgImage())
-        if (!result) throw new Error('Export failed')
-        const { imgData, cw, ch } = result
-
-        const pdf = new jsPDF({
-          orientation: cw > ch ? 'landscape' : 'portrait',
-          unit: 'mm',
-          format: 'a4',
-        })
-        const pageW = pdf.internal.pageSize.getWidth()
-        const pageH = pdf.internal.pageSize.getHeight()
-        const margin = 10
-        // jsPDF default font does not support Arabic; only add title if Latin-only to avoid corruption
-        const isLatinOnly = treeName ? /^[\x00-\x7F\s]*$/.test(treeName) : false
-        const titleH = isLatinOnly && treeName ? 12 : 0
-        const contentW = pageW - 2 * margin
-        const contentH = pageH - 2 * margin - titleH
-        const imgRatio = cw / ch
-        let imgW = contentW
-        let imgH = contentW / imgRatio
-        if (imgH > contentH) {
-          imgH = contentH
-          imgW = contentH * imgRatio
-        }
-        const imgY = margin + titleH
-        if (isLatinOnly && treeName) {
-          pdf.setFontSize(14)
-          pdf.setFont('helvetica', 'bold')
-          pdf.text(treeName, margin, margin + 6)
-        }
-        pdf.addImage(imgData, 'PNG', margin, imgY, imgW, imgH)
-        // Latin-only filename to avoid encoding errors when saving
-        const safeName = 'family-tree-' + Date.now()
-        pdf.save(`${safeName}.pdf`)
-      } finally {
-        setIsExporting(false)
-      }
-    },
-  }), [])
 
   const draw = useCallback(() => {
     if (!svgRef.current || !data) return
@@ -508,7 +385,7 @@ export const FamilyTreeCanvas = forwardRef<FamilyTreeCanvasHandle, FamilyTreeCan
   return (
     <div
       ref={containerRef}
-      className={`relative w-full h-full overflow-hidden select-none tree-canvas-bg ${isExporting ? 'tree-exporting' : ''}`}
+      className="relative w-full h-full overflow-hidden select-none tree-canvas-bg"
     >
       <svg ref={svgRef} className="w-full h-full" style={{ minHeight: 500 }} />
 
@@ -550,7 +427,6 @@ export const FamilyTreeCanvas = forwardRef<FamilyTreeCanvasHandle, FamilyTreeCan
       <div
         className="tree-zoom-controls absolute bottom-6 right-5 flex flex-col gap-1.5"
         dir="ltr"
-        style={isExporting ? { visibility: 'hidden', pointerEvents: 'none' } : undefined}
       >
         {([
           { label: '+', fn: () => zoomBy(1.3),  title: 'تكبير' },
@@ -572,7 +448,6 @@ export const FamilyTreeCanvas = forwardRef<FamilyTreeCanvasHandle, FamilyTreeCan
       <div
         className="tree-legend absolute top-4 left-4 bg-white/95 backdrop-blur-sm rounded-xl px-3 py-2.5 border border-sand-100 shadow-md space-y-1.5"
         dir="rtl"
-        style={isExporting ? { visibility: 'hidden', pointerEvents: 'none' } : undefined}
       >
         {([
           { color: MALE_ACCENT,   label: 'ذكر'   },
@@ -588,7 +463,7 @@ export const FamilyTreeCanvas = forwardRef<FamilyTreeCanvasHandle, FamilyTreeCan
       </div>
     </div>
   )
-})
+}
 
 function clip(s: string, max: number): string {
   const m = Math.max(3, Math.floor(max))

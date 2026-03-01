@@ -50,6 +50,7 @@ export function ShareModal({ treeId, treeName, onClose }: ShareModalProps) {
   const [generating,    setGenerating]    = useState(false)
   const [copiedToken,   setCopiedToken]   = useState<string | null>(null)
   const [activeLink,    setActiveLink]    = useState<string>('')   // the generated invite URL
+  const [copiedTreeLink, setCopiedTreeLink] = useState(false)
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -128,7 +129,17 @@ export function ShareModal({ treeId, treeName, onClose }: ShareModalProps) {
     ? window.location.origin
     : (process.env.NEXT_PUBLIC_APP_URL || '')
 
+  const treeExploreUrl = `${appUrl}/tree/${treeId}`
   function tokenUrl(token: string) { return `${appUrl}/invite/${token}` }
+
+  async function copyTreeLink() {
+    try {
+      await navigator.clipboard.writeText(treeExploreUrl)
+      setCopiedTreeLink(true)
+      toast.success('تم نسخ رابط الشجرة — شاركه مع من لديهم صلاحية للمشاهدة والاستكشاف')
+      setTimeout(() => setCopiedTreeLink(false), 2500)
+    } catch { toast.error('فشل النسخ') }
+  }
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" dir="rtl">
@@ -151,6 +162,23 @@ export function ShareModal({ treeId, treeName, onClose }: ShareModalProps) {
         </div>
 
         <div className="flex-1 overflow-y-auto p-5 space-y-6">
+
+          {/* ── Tree link: share & explore ─────────────────────────────────── */}
+          <section>
+            <h3 className="text-sm font-semibold text-khartoum-800 mb-2">رابط الشجرة للمشاهدة والاستكشاف</h3>
+            <p className="text-xs text-khartoum-500 mb-2">شارك هذا الرابط مع من لديهم صلاحية — يفتح الشجرة للاستكشاف (تكبير، تنقل، عرض الفرع).</p>
+            <div className="flex items-center gap-2 bg-nile-50 border border-nile-200 rounded-xl p-3">
+              <p className="flex-1 text-xs text-khartoum-700 font-mono truncate" dir="ltr">{treeExploreUrl}</p>
+              <button
+                type="button"
+                onClick={copyTreeLink}
+                className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-nile-200 hover:bg-nile-100 text-xs font-medium text-nile-800 transition-colors"
+              >
+                {copiedTreeLink ? <CheckCheck className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
+                {copiedTreeLink ? 'تم النسخ' : 'نسخ'}
+              </button>
+            </div>
+          </section>
 
           {/* ── Generate invite link ───────────────────────────────────────── */}
           <section>
