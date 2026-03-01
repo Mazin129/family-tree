@@ -1,10 +1,14 @@
 'use client'
 
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, forwardRef, useImperativeHandle } from 'react'
 import * as d3 from 'd3'
 import type { TreeNode } from '@/types'
 import { tatweelName } from '@/lib/utils/arabic'
 import { TreePine } from 'lucide-react'
+
+export interface FamilyTreeCanvasHandle {
+  exportToPdf: (treeName?: string) => Promise<void>
+}
 
 interface FamilyTreeCanvasProps {
   data:         TreeNode
@@ -60,15 +64,69 @@ const DEAD_TEXT   = '#334155'
 
 const TOOLTIP_HIDE_DELAY_MS = 400
 
-export function FamilyTreeCanvas({
+export const FamilyTreeCanvas = forwardRef<FamilyTreeCanvasHandle, FamilyTreeCanvasProps>(function FamilyTreeCanvas({
   data, onNodeClick, onNodeAdd, onViewSubtree, language = 'ar', readOnly = false,
-}: FamilyTreeCanvasProps) {
+}, ref) {
   const svgRef       = useRef<SVGSVGElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const zoomRef      = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null)
   const hideTooltipRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [tooltip,    setTooltip]    = useState<{ x: number; y: number; node: TreeNode } | null>(null)
+  const [isExporting, setIsExporting] = useState(false)
+
+  useImperativeHandle(ref, () => ({
+    async exportToPdf(treeName?: string) {
+      if (!containerRef.current) return
+      setTooltip(null)
+      setIsExporting(true)
+      try {
+        const [html2canvasModule, jspdfModule] = await Promise.all([
+          import('html2canvas'),
+          import('jspdf'),
+        ])
+        const html2canvas = html2canvasModule.default
+        const { jsPDF } = jspdfModule
+        const canvas = await html2canvas(containerRef.current, {
+          backgroundColor: '#f5f0e8',
+          scale: 2,
+          useCORS: true,
+          logging: false,
+          allowTaint: true,
+        })
+        const imgData = canvas.toDataURL('image/png')
+        const pdf = new jsPDF({
+          orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
+          unit: 'mm',
+          format: 'a4',
+        })
+        const pageW = pdf.internal.pageSize.getWidth()
+        const pageH = pdf.internal.pageSize.getHeight()
+        const margin = 10
+        const titleH = treeName ? 12 : 0
+        const contentW = pageW - 2 * margin
+        const contentH = pageH - 2 * margin - titleH
+        const imgRatio = canvas.width / canvas.height
+        let w = contentW
+        let h = contentW / imgRatio
+        if (h > contentH) {
+          h = contentH
+          w = contentH * imgRatio
+        }
+        const imgY = margin + titleH
+        if (treeName) {
+          pdf.setFontSize(14)
+          pdf.setFont('helvetica', 'bold')
+          pdf.text(treeName, margin, margin + 6)
+        }
+        pdf.addImage(imgData, 'PNG', margin, imgY, w, h)
+        const safeName = (treeName || 'family-tree').replace(/[^\w\u0600-\u06FF\s-]/g, '').trim() || 'family-tree'
+        pdf.save(`${safeName}.pdf`)
+      } finally {
+        setIsExporting(false)
+      }
+    },
+  }), [])
 
   const draw = useCallback(() => {
     if (!svgRef.current || !data) return
@@ -385,7 +443,7 @@ export function FamilyTreeCanvas({
   return (
     <div
       ref={containerRef}
-      className="relative w-full h-full overflow-hidden select-none tree-canvas-bg"
+      className={`relative w-full h-full overflow-hidden select-none tree-canvas-bg ${isExporting ? 'tree-exporting' : ''}`}
     >
       <svg ref={svgRef} className="w-full h-full" style={{ minHeight: 500 }} />
 
@@ -423,8 +481,12 @@ export function FamilyTreeCanvas({
         </div>
       )}
 
-      {/* ── Zoom controls ────────────────────────────────────────────────── */}
-      <div className="absolute bottom-6 right-5 flex flex-col gap-1.5" dir="ltr">
+      {/* ── Zoom controls (hidden during PDF export) ──────────────────────── */}
+      <div
+        className="tree-zoom-controls absolute bottom-6 right-5 flex flex-col gap-1.5"
+        dir="ltr"
+        style={isExporting ? { visibility: 'hidden', pointerEvents: 'none' } : undefined}
+      >
         {([
           { label: '+', fn: () => zoomBy(1.3),  title: 'تكبير' },
           { label: '−', fn: () => zoomBy(0.77), title: 'تصغير' },
@@ -441,10 +503,11 @@ export function FamilyTreeCanvas({
         ))}
       </div>
 
-      {/* ── Legend ───────────────────────────────────────────────────────── */}
+      {/* ── Legend (hidden during PDF export) ────────────────────────────── */}
       <div
-        className="absolute top-4 left-4 bg-white/95 backdrop-blur-sm rounded-xl px-3 py-2.5 border border-sand-100 shadow-md space-y-1.5"
+        className="tree-legend absolute top-4 left-4 bg-white/95 backdrop-blur-sm rounded-xl px-3 py-2.5 border border-sand-100 shadow-md space-y-1.5"
         dir="rtl"
+        style={isExporting ? { visibility: 'hidden', pointerEvents: 'none' } : undefined}
       >
         {([
           { color: MALE_ACCENT,   label: 'ذكر'   },
@@ -460,7 +523,7 @@ export function FamilyTreeCanvas({
       </div>
     </div>
   )
-}
+})
 
 function clip(s: string, max: number): string {
   const m = Math.max(3, Math.floor(max))

@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams } from 'next/navigation'
-import { FamilyTreeCanvas }  from '@/components/family-tree/FamilyTreeCanvas'
+import { FamilyTreeCanvas, type FamilyTreeCanvasHandle } from '@/components/family-tree/FamilyTreeCanvas'
 import { MemberCard }        from '@/components/family-tree/MemberCard'
 import { AddMemberModal }     from '@/components/family-tree/AddMemberModal'
 import { EditMemberModal }    from '@/components/family-tree/EditMemberModal'
@@ -11,7 +11,7 @@ import { ShareModal }        from '@/components/family-tree/ShareModal'
 import { AIInsightsPanel }   from '@/components/ai/AIInsightsPanel'
 import { toast }             from 'sonner'
 import {
-  TreePine, Plus, Settings, Share2,
+  TreePine, Plus, Settings, Share2, FileDown,
   Users, Sparkles, ChevronLeft, X, UserCircle2, UsersRound,
 } from 'lucide-react'
 import type { TreeNode, TreeMember, FamilyTree } from '@/types'
@@ -36,6 +36,8 @@ export default function TreeViewPage() {
   const [activeTab,      setActiveTab]      = useState<Tab>('tree')
   const [subtreeRoot,    setSubtreeRoot]    = useState<TreeNode | null>(null)
   const [loading,        setLoading]        = useState(true)
+  const [exportingPdf,   setExportingPdf]  = useState(false)
+  const treeCanvasRef    = useRef<FamilyTreeCanvasHandle>(null)
 
   const fetchTree = useCallback(async () => {
     try {
@@ -81,6 +83,19 @@ export default function TreeViewPage() {
 
   function handleViewSubtree(node: TreeNode) {
     setSubtreeRoot(node)
+  }
+
+  async function handleExportPdf() {
+    if (!treeCanvasRef.current) return
+    setExportingPdf(true)
+    try {
+      await treeCanvasRef.current.exportToPdf(tree?.nameArabic || tree?.name || undefined)
+      toast.success('تم تصدير الشجرة كـ PDF')
+    } catch {
+      toast.error('فشل تصدير PDF')
+    } finally {
+      setExportingPdf(false)
+    }
   }
 
   async function handleDeleteMember(memberId: string) {
@@ -159,6 +174,21 @@ export default function TreeViewPage() {
             <span className="hidden sm:inline">إضافة فرد</span>
           </button>
           <button
+            title={activeTab === 'tree' && treeData ? 'تصدير الشجرة كـ PDF' : 'تصدير PDF'}
+            onClick={() => {
+              if (activeTab !== 'tree') {
+                setActiveTab('tree')
+                if (treeData) toast.info('انقر تصدير PDF مرة أخرى بعد ظهور الشجرة')
+                return
+              }
+              if (treeData) handleExportPdf()
+            }}
+            disabled={exportingPdf}
+            className="w-9 h-9 rounded-xl border border-sand-200 flex items-center justify-center hover:bg-sand-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <FileDown className="w-4 h-4 text-khartoum-500" />
+          </button>
+          <button
             title="مشاركة الشجرة"
             onClick={() => setShowShareModal(true)}
             className="w-9 h-9 rounded-xl border border-sand-200 flex items-center justify-center hover:bg-sand-50 transition-colors"
@@ -224,6 +254,7 @@ export default function TreeViewPage() {
                   )}
                   <div className="flex-1 min-h-0">
                     <FamilyTreeCanvas
+                      ref={treeCanvasRef}
                       data={subtreeRoot ?? treeData}
                       onNodeClick={handleNodeClick}
                       onNodeAdd={handleNodeAdd}
