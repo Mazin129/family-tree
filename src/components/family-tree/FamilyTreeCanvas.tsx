@@ -78,50 +78,61 @@ export const FamilyTreeCanvas = forwardRef<FamilyTreeCanvasHandle, FamilyTreeCan
   useImperativeHandle(ref, () => ({
     async exportToPdf(treeName?: string) {
       const svgEl = svgRef.current
-      if (!svgEl) return
+      const container = containerRef.current
+      if (!svgEl && !container) return
       setTooltip(null)
       setIsExporting(true)
       try {
         const { jsPDF } = await import('jspdf')
-        const w = Math.max(svgEl.clientWidth || 960, 400)
-        const h = Math.max(svgEl.clientHeight || 640, 300)
-        const scale = 2
-        const clone = svgEl.cloneNode(true) as SVGSVGElement
-        clone.setAttribute('width', String(w))
-        clone.setAttribute('height', String(h))
-        const serializer = new XMLSerializer()
-        const svgString = serializer.serializeToString(clone)
-        const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' })
-        const url = URL.createObjectURL(blob)
-        const img = new Image()
-        await new Promise<void>((resolve, reject) => {
-          img.onload = () => {
-            URL.revokeObjectURL(url)
-            resolve()
-          }
-          img.onerror = () => {
-            URL.revokeObjectURL(url)
-            reject(new Error('SVG export failed'))
-          }
-          img.src = url
-        })
-        const canvas = document.createElement('canvas')
-        canvas.width = w * scale
-        canvas.height = h * scale
-        const ctx = canvas.getContext('2d')
-        if (!ctx) throw new Error('Canvas not supported')
-        ctx.fillStyle = '#f5f0e8'
-        ctx.fillRect(0, 0, canvas.width, canvas.height)
-        ctx.scale(scale, scale)
-        ctx.drawImage(img, 0, 0, w, h)
         let imgData: string
+        let cw: number
+        let ch: number
+
         try {
+          if (!svgEl) throw new Error('No SVG')
+          const w = Math.max(svgEl.clientWidth || 960, 400)
+          const h = Math.max(svgEl.clientHeight || 640, 300)
+          const scale = 2
+          const clone = svgEl.cloneNode(true) as SVGSVGElement
+          clone.setAttribute('width', String(w))
+          clone.setAttribute('height', String(h))
+          clone.querySelectorAll('image').forEach((el) => el.remove())
+          const svgString = new XMLSerializer().serializeToString(clone)
+          const dataUrl = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svgString)))}`
+          const img = new Image()
+          await new Promise<void>((resolve, reject) => {
+            img.onload = () => resolve()
+            img.onerror = () => reject(new Error('SVG load failed'))
+            img.src = dataUrl
+          })
+          const canvas = document.createElement('canvas')
+          canvas.width = w * scale
+          canvas.height = h * scale
+          const ctx = canvas.getContext('2d')
+          if (!ctx) throw new Error('No canvas context')
+          ctx.fillStyle = '#f5f0e8'
+          ctx.fillRect(0, 0, canvas.width, canvas.height)
+          ctx.scale(scale, scale)
+          ctx.drawImage(img, 0, 0, w, h)
           imgData = canvas.toDataURL('image/png')
+          cw = canvas.width
+          ch = canvas.height
         } catch {
-          throw new Error('Export failed (e.g. external images). Try without photos.')
+          if (!container) throw new Error('Export failed')
+          const html2canvas = (await import('html2canvas')).default
+          const canvas = await html2canvas(container, {
+            backgroundColor: '#f5f0e8',
+            scale: 2,
+            useCORS: true,
+            logging: false,
+          })
+          imgData = canvas.toDataURL('image/png')
+          cw = canvas.width
+          ch = canvas.height
         }
+
         const pdf = new jsPDF({
-          orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
+          orientation: cw > ch ? 'landscape' : 'portrait',
           unit: 'mm',
           format: 'a4',
         })
@@ -131,7 +142,7 @@ export const FamilyTreeCanvas = forwardRef<FamilyTreeCanvasHandle, FamilyTreeCan
         const titleH = treeName ? 12 : 0
         const contentW = pageW - 2 * margin
         const contentH = pageH - 2 * margin - titleH
-        const imgRatio = canvas.width / canvas.height
+        const imgRatio = cw / ch
         let imgW = contentW
         let imgH = contentW / imgRatio
         if (imgH > contentH) {
