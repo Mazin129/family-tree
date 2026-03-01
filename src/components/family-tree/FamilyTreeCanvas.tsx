@@ -25,8 +25,8 @@ const EX_CARD_H = 130
 const EX_AVATAR_R = 28
 
 // Node spacing for d3.tree: [horizontal between siblings, vertical between generations]
-const NODE_DX = 200
-const NODE_DY = 100
+const NODE_DX = 220
+const NODE_DY = 115
 
 // Connector: use max card height so lines never overlap cards at any zoom
 const CONN_CARD_HALF = Math.max(CARD_H, EX_CARD_H) / 2
@@ -117,6 +117,7 @@ export function FamilyTreeCanvas({
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [maxDepth, setMaxDepth] = useState(DEFAULT_MAX_DEPTH)
   const [semanticMode, setSemanticMode] = useState<SemanticZoomMode>('compact')
+  const [zoomScale, setZoomScale] = useState(1)
   const [generations, setGenerations] = useState<{ depth: number; y: number; label: string }[]>([])
 
   const toggleCollapse = useCallback((id: string) => {
@@ -187,6 +188,7 @@ export function FamilyTreeCanvas({
           setSemanticMode(mode)
         }
       })
+      .on('end', (ev) => setZoomScale(ev.transform.k))
     zoomBehaviorRef.current = zoom
     svg.call(zoom)
 
@@ -206,8 +208,10 @@ export function FamilyTreeCanvas({
       didInitialFit.current = true
       lastSemanticModeRef.current = getSemanticMode(t.k)
       setSemanticMode(lastSemanticModeRef.current)
+      setZoomScale(t.k)
     } else {
       svg.call(zoom.transform, transformRef.current)
+      setZoomScale(transformRef.current.k)
     }
 
     // Generation strip data (by depth → y)
@@ -520,6 +524,10 @@ export function FamilyTreeCanvas({
           <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-slate-400" /> متوفى</span>
         </div>
         <p className="text-[10px] text-khartoum-400 mt-1.5 pt-1.5 border-t border-sand-100">نقر مزدوج = عرض الفرع</p>
+      </div>
+
+      <div className="absolute top-3 left-3 bg-white/90 rounded-lg px-2.5 py-1.5 border border-sand-200 shadow-sm text-[11px] font-medium text-khartoum-500 tabular-nums z-10" title="مستوى التكبير">
+        {Math.round(zoomScale * 100)}%
       </div>
     </div>
   )
