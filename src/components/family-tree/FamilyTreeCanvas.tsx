@@ -62,7 +62,7 @@ const DEAD_ACCENT = '#94a3b8'
 const DEAD_AV_BG  = '#e2e8f0'
 const DEAD_TEXT   = '#334155'
 
-const DEFAULT_EXPAND_DEPTH = 3
+const DEFAULT_EXPAND_DEPTH = 10
 
 function countChildren(node: TreeNode): number {
   return (node.children?.length ?? 0) + (node.children?.reduce((s, c) => s + countChildren(c), 0) ?? 0)
