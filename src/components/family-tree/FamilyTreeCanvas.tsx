@@ -107,7 +107,7 @@ export const FamilyTreeCanvas = forwardRef<FamilyTreeCanvasHandle, FamilyTreeCan
           if (!ctx) throw new Error('No canvas context')
           ctx.fillStyle = '#f5f0e8'
           ctx.fillRect(0, 0, canvas.width, canvas.height)
-          const Canvg = (await import('canvg')).default
+          const { Canvg } = await import('canvg')
           const v = Canvg.fromString(ctx, svgString, {
             ignoreClear: true,
             scaleWidth: canvas.width,
