@@ -138,10 +138,11 @@ export function FamilyTreeCanvas({
       .separation((a, b) => a.parent === b.parent ? 1 : 1.2)(root)
 
     const allNodes = root.descendants()
-    const xs = allNodes.map(n => n.x!)
-    const ys = allNodes.map(n => n.y!)
-    const treeW = (Math.max(...xs) - Math.min(...xs)) + NS_W
-    const treeH = (Math.max(...ys) - Math.min(...ys)) + NS_H
+    // Swap so depth = horizontal (generations left→right), breadth = vertical (siblings stack)
+    const depthAxis = allNodes.map(n => n.y!)
+    const breadthAxis = allNodes.map(n => n.x!)
+    const treeW = (Math.max(...depthAxis) - Math.min(...depthAxis)) + NS_H
+    const treeH = (Math.max(...breadthAxis) - Math.min(...breadthAxis)) + NS_W
 
     // ── Root group ────────────────────────────────────────────────────────
     const g = svg.append('g')
@@ -164,8 +165,8 @@ export function FamilyTreeCanvas({
       const scaleX = W / (treeW + padX * 2)
       const scaleY = H / (treeH + padY * 2)
       const scale = Math.min(scaleX, scaleY, 1.2)
-      const cx = (Math.min(...xs) + Math.max(...xs)) / 2
-      const cy = (Math.min(...ys) + Math.max(...ys)) / 2
+      const cx = (Math.min(...depthAxis) + Math.max(...depthAxis)) / 2
+      const cy = (Math.min(...breadthAxis) + Math.max(...breadthAxis)) / 2
       const initT = d3.zoomIdentity
         .translate(W / 2, H / 2)
         .scale(scale)
@@ -177,14 +178,14 @@ export function FamilyTreeCanvas({
       svg.call(zoom.transform, transformRef.current)
     }
 
-    // ── Generation info ───────────────────────────────────────────────────
+    // ── Generation info (depth = horizontal = y in d3) ─────────────────────
     const genMap = new Map<number, number>()
     allNodes.forEach(n => {
       if (!genMap.has(n.depth)) genMap.set(n.depth, n.y!)
     })
     const gens = Array.from(genMap.entries())
       .sort((a, b) => a[0] - b[0])
-      .map(([depth, y]) => ({ depth, y, label: `الجيل ${depth + 1}` }))
+      .map(([depth, depthCoord]) => ({ depth, y: depthCoord, label: `الجيل ${depth + 1}` }))
     setGenerations(gens)
 
     type HNode = d3.HierarchyPointNode<ExtTreeNode>
@@ -199,30 +200,32 @@ export function FamilyTreeCanvas({
       byParent.get(s)!.push(t)
     })
 
+    // Horizontal pedigree: screenX = depth (y), screenY = breadth (x). Connectors go right from parent to vertical spine, then to each child.
     byParent.forEach((children, parent) => {
-      const px = parent.x
-      const topY = parent.y + CH / 2 + 6
-      const botY = children[0].y - CH / 2 - 6
-      const midY = topY + (botY - topY) * 0.5
+      const parentRightX = parent.y + CW / 2 + 8
+      const childLeftX = Math.min(...children.map(c => c.y)) - CW / 2 - 8
+      const midX = (parentRightX + childLeftX) / 2
+      const minChildSy = Math.min(...children.map(c => c.x))
+      const maxChildSy = Math.max(...children.map(c => c.x))
 
-      const path = d3.path()
-      path.moveTo(px, topY)
-      path.lineTo(px, midY)
-      connLayer.append('path').attr('d', path.toString())
-        .attr('fill', 'none').attr('stroke', CONN).attr('stroke-width', C_W)
+      connLayer.append('line')
+        .attr('x1', parent.y + CW / 2 + 8).attr('y1', parent.x)
+        .attr('x2', midX).attr('y2', parent.x)
+        .attr('stroke', CONN).attr('stroke-width', C_W).attr('stroke-linecap', 'round')
 
-      if (children.length > 1) {
-        const minCX = Math.min(...children.map(c => c.x))
-        const maxCX = Math.max(...children.map(c => c.x))
-        connLayer.append('line')
-          .attr('x1', minCX).attr('y1', midY).attr('x2', maxCX).attr('y2', midY)
-          .attr('stroke', CONN).attr('stroke-width', C_W)
-      }
+      const spineTop = Math.min(parent.x, minChildSy)
+      const spineBottom = Math.max(parent.x, maxChildSy)
+      connLayer.append('line')
+        .attr('x1', midX).attr('y1', spineTop)
+        .attr('x2', midX).attr('y2', spineBottom)
+        .attr('stroke', CONN).attr('stroke-width', C_W).attr('stroke-linecap', 'round')
 
       children.forEach(child => {
+        const toX = child.y - CW / 2 - 8
         connLayer.append('line')
-          .attr('x1', child.x).attr('y1', midY).attr('x2', child.x).attr('y2', botY)
-          .attr('stroke', CONN).attr('stroke-width', C_W)
+          .attr('x1', midX).attr('y1', child.x)
+          .attr('x2', toX).attr('y2', child.x)
+          .attr('stroke', CONN).attr('stroke-width', C_W).attr('stroke-linecap', 'round')
       })
     })
 
@@ -380,13 +383,13 @@ export function FamilyTreeCanvas({
         .attr('fill', c.accent).attr('stroke', 'white').attr('stroke-width', 1.5)
     }
 
-    // ── Node groups ───────────────────────────────────────────────────────
+    // ── Node groups (swap: screen x = depth = d.y, screen y = breadth = d.x) ─
     const nodeGs = g.append('g').attr('class', 'nodes-layer')
       .selectAll<SVGGElement, HNode>('.node')
       .data(allNodes)
       .enter().append('g')
       .attr('class', 'node')
-      .attr('transform', d => `translate(${d.x},${d.y})`)
+      .attr('transform', d => `translate(${d.y},${d.x})`)
       .style('cursor', 'pointer')
 
     nodeGs.each(function(d) {
@@ -519,8 +522,9 @@ export function FamilyTreeCanvas({
               onClick={() => {
                 if (!svgRef.current || !zoomRef.current) return
                 const t = transformRef.current
-                const newY = -(gen.y * t.k) + (svgRef.current.clientHeight / 2)
-                const newT = d3.zoomIdentity.translate(t.x, newY).scale(t.k)
+                // gen.y is depth coordinate = horizontal axis; center it in view
+                const newX = -(gen.y * t.k) + (svgRef.current.clientWidth / 2)
+                const newT = d3.zoomIdentity.translate(newX, t.y).scale(t.k)
                 d3.select(svgRef.current).transition().duration(400).call(zoomRef.current.transform, newT)
               }}
               className="w-7 h-7 rounded-lg bg-white/90 border border-sand-200 shadow-sm flex items-center justify-center text-[10px] font-bold text-khartoum-600 hover:bg-sand-100 transition-colors"
