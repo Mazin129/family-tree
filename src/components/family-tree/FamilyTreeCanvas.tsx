@@ -21,30 +21,31 @@ interface FamilyTreeCanvasProps {
 }
 
 // ── Layout constants (single source of truth) ─────────────────────────────────
-const CARD_W = 160
-const CARD_H = 104
-const CARD_R = 12
-const AVATAR_R = 18
-const LINE_HEIGHT = 14
+const CARD_W = 176
+const CARD_H = 138
+const CARD_R = 14
+const CARD_PADDING_X = 16
+const AVATAR_R = 20
+const LINE_HEIGHT = 18
 
-const EX_CARD_W = 180
-const EX_CARD_H = 130
-const EX_AVATAR_R = 28
+const EX_CARD_W = 200
+const EX_CARD_H = 150
+const EX_AVATAR_R = 30
 
-// Node spacing for d3.tree: [horizontal between siblings, vertical between generations]
-const NODE_DX = 220
-const NODE_DY = 115
+// Node spacing: generous gap so nodes and lines never feel cramped
+const NODE_DX = 280
+const NODE_DY = 150
 
-// Connector: use max card height so lines never overlap cards at any zoom
+// Connector: clear, visible lines; gap so they don’t touch card edges
 const CONN_CARD_HALF = Math.max(CARD_H, EX_CARD_H) / 2
-const CONN_GAP = 10
+const CONN_GAP = 14
 
 // Semantic zoom: card style by scale
 const ZOOM_DOT = 0.22
 const ZOOM_EXPANDED = 0.65
 
-const CONN_COLOR = '#b8a898'
-const CONN_WIDTH = 1.5
+const CONN_COLOR = '#6b5b4f'
+const CONN_WIDTH = 2
 
 const MALE_BG     = '#dbeafe'
 const MALE_BORDER = '#93c5fd'
@@ -336,9 +337,10 @@ export function FamilyTreeCanvas({
         .attr('x', ox).attr('y', -h / 2).attr('width', 5).attr('height', h).attr('rx', 2.5)
         .attr('fill', col.accent)
 
-      const avCx = ox + (isExpanded ? w / 2 : 32)
-      const avCy = isExpanded ? -h / 2 + 20 + EX_AVATAR_R : 0
+      const avCx = ox + (isExpanded ? w / 2 : CARD_PADDING_X + AVATAR_R)
+      const avCy = isExpanded ? -h / 2 + 24 + EX_AVATAR_R : 0
       const avR = isExpanded ? EX_AVATAR_R : AVATAR_R
+      const textGap = 14
 
       d3.select(this)
         .append('circle').attr('cx', avCx).attr('cy', avCy).attr('r', avR)
@@ -360,9 +362,9 @@ export function FamilyTreeCanvas({
           .text((name || '؟').charAt(0))
       }
 
-      const textX = ox + (isExpanded ? w / 2 : 56)
+      const textX = ox + (isExpanded ? w / 2 : CARD_PADDING_X + AVATAR_R * 2 + textGap)
       // Compact: name below avatar (avatar y=0, r=18) so name/tribe/† don’t overlap the circle.
-      const nameY = isExpanded ? avCy + avR + 14 : 22
+      const nameY = isExpanded ? avCy + avR + 16 : AVATAR_R + 10
       d3.select(this)
         .append('text').attr('x', textX).attr('y', nameY)
         .attr('text-anchor', isExpanded ? 'middle' : 'start').attr('font-size', isExpanded ? 13 : 12.5).attr('font-weight', '700')
