@@ -155,6 +155,7 @@ export interface TreeNode {
   children?: TreeNode[]
   spouses?: TreeNode[]
   _collapsed?: boolean
+  _childCount?: number
   _depth?: number
   postgresId?: string
 }

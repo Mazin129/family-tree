@@ -212,13 +212,17 @@ export default function TreeViewPage() {
                       <button
                         type="button"
                         onClick={() => setSubtreeRoot(null)}
-                        className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-sm font-medium text-khartoum-600 hover:bg-sand-100 transition-colors"
+                        className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-sm font-medium text-nile-700 bg-nile-50 hover:bg-nile-100 transition-colors"
                       >
-                        <ChevronLeft className="w-4 h-4" />
-                        العودة للشجرة الكاملة
+                        <TreePine className="w-3.5 h-3.5" />
+                        الشجرة الكاملة
                       </button>
-                      <span className="text-xs text-khartoum-400">
-                        عرض فرع: {subtreeRoot.nameArabic || subtreeRoot.name}
+                      <ChevronLeft className="w-3 h-3 text-khartoum-300 rotate-180" />
+                      <span className="text-sm font-semibold text-khartoum-800">
+                        {subtreeRoot.nameArabic || subtreeRoot.name}
+                      </span>
+                      <span className="text-xs text-khartoum-400 bg-sand-100 px-2 py-0.5 rounded-full">
+                        فرع
                       </span>
                     </div>
                   )}
