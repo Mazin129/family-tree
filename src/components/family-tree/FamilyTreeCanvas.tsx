@@ -21,31 +21,29 @@ interface FamilyTreeCanvasProps {
 }
 
 // ── Layout constants (single source of truth) ─────────────────────────────────
-const CARD_W = 176
-const CARD_H = 138
-const CARD_R = 14
-const CARD_PADDING_X = 16
-const AVATAR_R = 20
-const LINE_HEIGHT = 18
+const CARD_W = 160
+const CARD_H = 64
+const CARD_R = 12
+const AVATAR_R = 18
 
-const EX_CARD_W = 200
-const EX_CARD_H = 150
-const EX_AVATAR_R = 30
+const EX_CARD_W = 180
+const EX_CARD_H = 130
+const EX_AVATAR_R = 28
 
-// Node spacing: generous gap so nodes and lines never feel cramped
-const NODE_DX = 280
-const NODE_DY = 150
+// Node spacing for d3.tree: [horizontal between siblings, vertical between generations]
+const NODE_DX = 200
+const NODE_DY = 100
 
 // Connector: clear, visible lines; gap so they don’t touch card edges
 const CONN_CARD_HALF = Math.max(CARD_H, EX_CARD_H) / 2
-const CONN_GAP = 14
+const CONN_GAP = 10
 
 // Semantic zoom: card style by scale
 const ZOOM_DOT = 0.22
 const ZOOM_EXPANDED = 0.65
 
-const CONN_COLOR = '#6b5b4f'
-const CONN_WIDTH = 2
+const CONN_COLOR = '#b8a898'
+const CONN_WIDTH = 1.5
 
 const MALE_BG     = '#dbeafe'
 const MALE_BORDER = '#93c5fd'
@@ -137,10 +135,10 @@ export function FamilyTreeCanvas({
     })
   }, [])
 
-  const filteredTree = useMemo(() => {
-    if (!data?.id) return null
-    return filterByDepthAndCollapsed(data, collapsed, 0, maxDepth)
-  }, [data, collapsed, maxDepth])
+  const filteredTree = useMemo(
+    () => filterByDepthAndCollapsed(data, collapsed, 0, maxDepth),
+    [data, collapsed, maxDepth]
+  )
 
   // When tree data identity changes (e.g. switch to subtree), fit again on next draw
   const dataIdRef = useRef(data?.id)
@@ -153,7 +151,7 @@ export function FamilyTreeCanvas({
 
   const draw = useCallback(() => {
     const svgEl = svgRef.current
-    if (!svgEl || !filteredTree || !data?.id) return
+    if (!svgEl || !filteredTree) return
 
     const svg = d3.select(svgEl)
     svg.selectAll('*').remove()
@@ -337,10 +335,9 @@ export function FamilyTreeCanvas({
         .attr('x', ox).attr('y', -h / 2).attr('width', 5).attr('height', h).attr('rx', 2.5)
         .attr('fill', col.accent)
 
-      const avCx = ox + (isExpanded ? w / 2 : CARD_PADDING_X + AVATAR_R)
-      const avCy = isExpanded ? -h / 2 + 24 + EX_AVATAR_R : 0
+      const avCx = ox + (isExpanded ? w / 2 : 32)
+      const avCy = isExpanded ? -h / 2 + 20 + EX_AVATAR_R : 0
       const avR = isExpanded ? EX_AVATAR_R : AVATAR_R
-      const textGap = 14
 
       d3.select(this)
         .append('circle').attr('cx', avCx).attr('cy', avCy).attr('r', avR)
@@ -362,9 +359,9 @@ export function FamilyTreeCanvas({
           .text((name || '؟').charAt(0))
       }
 
-      const textX = ox + (isExpanded ? w / 2 : CARD_PADDING_X + AVATAR_R * 2 + textGap)
+      const textX = ox + (isExpanded ? w / 2 : 56)
       // Compact: name below avatar (avatar y=0, r=18) so name/tribe/† don’t overlap the circle.
-      const nameY = isExpanded ? avCy + avR + 16 : AVATAR_R + 10
+      const nameY = isExpanded ? avCy + avR + 14 : -6
       d3.select(this)
         .append('text').attr('x', textX).attr('y', nameY)
         .attr('text-anchor', isExpanded ? 'middle' : 'start').attr('font-size', isExpanded ? 13 : 12.5).attr('font-weight', '700')
@@ -382,17 +379,17 @@ export function FamilyTreeCanvas({
       const metaStr = meta.filter(Boolean).join(isExpanded ? ' ' : ' · ')
       if (metaStr) {
         d3.select(this)
-          .append('text').attr('x', textX).attr('y', nameY + LINE_HEIGHT)
+          .append('text').attr('x', textX).attr('y', nameY + (isExpanded ? 16 : 16))
           .attr('text-anchor', isExpanded ? 'middle' : 'start').attr('font-size', 10)
           .attr('font-family', "'Cairo', sans-serif").attr('fill', '#64748b')
-          .text(clipText(metaStr, 32))
+          .text(clipText(metaStr, 28))
       }
 
       const spouseCount = p.spouses?.length ?? 0
       if (spouseCount > 0) {
         const spName = displayName(p.spouses![0])
         d3.select(this)
-          .append('text').attr('x', textX).attr('y', nameY + LINE_HEIGHT * 2)
+          .append('text').attr('x', textX).attr('y', nameY + (isExpanded ? 32 : 28))
           .attr('text-anchor', isExpanded ? 'middle' : 'start').attr('font-size', 9)
           .attr('font-family', "'Cairo', sans-serif").attr('fill', '#92400e')
           .text('♥ ' + clipText(spName, 12) + (spouseCount > 1 ? ` +${spouseCount - 1}` : ''))
@@ -475,17 +472,9 @@ export function FamilyTreeCanvas({
     setMaxDepth((d) => Math.min(d + 5, MAX_DEPTH_LIMIT))
   }, [])
 
-  if (!data?.id) {
-    return (
-      <div ref={containerRef} className="relative w-full h-full flex items-center justify-center bg-sand-50/80" aria-live="polite">
-        <p className="text-khartoum-500 text-sm" dir="rtl">لا توجد بيانات للشجرة</p>
-      </div>
-    )
-  }
-
   return (
     <div ref={containerRef} className="relative w-full h-full overflow-hidden select-none bg-sand-50/80">
-      <svg ref={svgRef} className="w-full h-full block" style={{ minHeight: 400 }} aria-label="شجرة العائلة" role="img" />
+      <svg ref={svgRef} className="w-full h-full block" style={{ minHeight: 400 }} aria-label="شجرة العائلة" />
 
       {generations.length > 1 && (
         <div className="absolute top-1/2 right-2 -translate-y-1/2 flex flex-col gap-1 z-20" dir="rtl">
@@ -502,7 +491,6 @@ export function FamilyTreeCanvas({
               }}
               className="w-8 h-8 rounded-lg bg-white/95 border border-sand-200 shadow-sm flex items-center justify-center text-xs font-bold text-khartoum-600 hover:bg-sand-100"
               title={gen.label}
-              aria-label={gen.label}
             >
               {gen.depth + 1}
             </button>
@@ -521,7 +509,6 @@ export function FamilyTreeCanvas({
             type="button"
             onClick={b.fn}
             title={b.title}
-            aria-label={b.title}
             className="w-10 h-10 rounded-xl bg-white/95 border border-sand-200 shadow-md flex items-center justify-center text-khartoum-600 hover:bg-white font-bold text-sm"
           >
             {b.label}
@@ -533,8 +520,7 @@ export function FamilyTreeCanvas({
         <button
           type="button"
           onClick={expandAll}
-          title="عرض كل المستويات حتى 30"
-          aria-label="توسيع الكل — عرض كل المستويات حتى 30"
+          title="توسيع الكل"
           className="px-3 py-1.5 rounded-lg bg-white/95 border border-sand-200 shadow-sm text-xs font-semibold text-khartoum-600 hover:bg-sand-100"
         >
           توسيع الكل
@@ -542,8 +528,7 @@ export function FamilyTreeCanvas({
         <button
           type="button"
           onClick={showMoreLevels}
-          title="إضافة 5 مستويات"
-          aria-label="أجيال أكثر — إضافة 5 مستويات"
+          title="أجيال أكثر"
           className="px-3 py-1.5 rounded-lg bg-nile-100 border border-nile-200 text-xs font-semibold text-nile-700 hover:bg-nile-200"
         >
           أجيال +
@@ -552,7 +537,6 @@ export function FamilyTreeCanvas({
           type="button"
           onClick={collapseAll}
           title="طي الفروع"
-          aria-label="طي الفروع"
           className="px-3 py-1.5 rounded-lg bg-white/95 border border-sand-200 shadow-sm text-xs font-semibold text-khartoum-600 hover:bg-sand-100"
         >
           طي
@@ -561,13 +545,11 @@ export function FamilyTreeCanvas({
 
       <div className="absolute bottom-4 left-3 bg-white/95 rounded-xl px-3 py-2 border border-sand-100 shadow-sm z-20" dir="rtl">
         <div className="flex flex-wrap gap-x-3 gap-y-1">
-          <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: MALE_ACCENT }} aria-hidden /> ذكر</span>
-          <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: FEMALE_ACCENT }} aria-hidden /> أنثى</span>
-          <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: DEAD_ACCENT }} aria-hidden /> متوفى</span>
+          <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-blue-500 shrink-0" /> ذكر</span>
+          <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-pink-500 shrink-0" /> أنثى</span>
+          <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-slate-400 shrink-0" /> متوفى</span>
         </div>
-        <p className="text-[10px] text-khartoum-400 mt-1.5 pt-1.5 border-t border-sand-100">
-          ♥ زوج/زوجة · ▼ فرع مطوي · نقر مزدوج = عرض الفرع
-        </p>
+        <p className="text-[10px] text-khartoum-400 mt-1.5 pt-1.5 border-t border-sand-100">نقر مزدوج = عرض الفرع</p>
       </div>
 
       <div className="absolute top-3 left-3 bg-white/90 rounded-lg px-2.5 py-1.5 border border-sand-200 shadow-sm text-[11px] font-medium text-khartoum-500 tabular-nums z-10" title="مستوى التكبير">
