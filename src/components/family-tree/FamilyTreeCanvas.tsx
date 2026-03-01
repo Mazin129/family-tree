@@ -62,7 +62,8 @@ const DEAD_ACCENT = '#94a3b8'
 const DEAD_AV_BG  = '#e2e8f0'
 const DEAD_TEXT   = '#334155'
 
-const DEFAULT_EXPAND_DEPTH = 3
+const DEFAULT_EXPAND_DEPTH = 10
+const MAX_DEPTH_EXPAND_ALL = 25
 
 function countChildren(node: TreeNode): number {
   return (node.children?.length ?? 0) + (node.children?.reduce((s, c) => s + countChildren(c), 0) ?? 0)
@@ -98,6 +99,7 @@ export function FamilyTreeCanvas({
 
   const [selectedId,  setSelectedId]  = useState<string | null>(null)
   const [collapsed,   setCollapsed]   = useState<Set<string>>(new Set())
+  const [maxDepth,    setMaxDepth]    = useState(DEFAULT_EXPAND_DEPTH)
   const [zoomLevel,   setZoomLevel]   = useState(1)
   const [generations, setGenerations] = useState<{ depth: number; y: number; label: string }[]>([])
 
@@ -111,8 +113,8 @@ export function FamilyTreeCanvas({
   }, [])
 
   const filteredData = useMemo(() => {
-    return filterCollapsed(data, collapsed, 0, DEFAULT_EXPAND_DEPTH)
-  }, [data, collapsed])
+    return filterCollapsed(data, collapsed, 0, maxDepth)
+  }, [data, collapsed, maxDepth])
 
   const draw = useCallback(() => {
     if (!svgRef.current || !filteredData) return
@@ -496,7 +498,10 @@ export function FamilyTreeCanvas({
     draw()
   }
 
-  function expandAll() { setCollapsed(new Set()) }
+  function expandAll() {
+    setCollapsed(new Set())
+    setMaxDepth(MAX_DEPTH_EXPAND_ALL)
+  }
   function collapseAll() {
     const ids = new Set<string>()
     function walk(n: TreeNode, depth: number) {
@@ -505,6 +510,10 @@ export function FamilyTreeCanvas({
     }
     walk(data, 0)
     setCollapsed(ids)
+    setMaxDepth(DEFAULT_EXPAND_DEPTH)
+  }
+  function showMoreGenerations() {
+    setMaxDepth((d) => Math.min(d + 5, MAX_DEPTH_EXPAND_ALL))
   }
 
   return (
@@ -551,13 +560,17 @@ export function FamilyTreeCanvas({
         ))}
       </div>
 
-      {/* ── Expand/Collapse all ────────────────────────────────────────── */}
-      <div className="absolute top-3 right-3 flex gap-1.5 z-20" dir="rtl">
-        <button onClick={expandAll} title="توسيع الكل"
+      {/* ── Expand/Collapse all + Show more generations ──────────────────── */}
+      <div className="absolute top-3 right-3 flex flex-wrap items-center gap-1.5 z-20" dir="rtl">
+        <button onClick={expandAll} title="توسيع الشجرة وعرض كل الأجيال (حتى 25 مستوى)"
           className="px-2.5 py-1 rounded-lg bg-white/90 border border-sand-200 shadow-sm text-[10px] font-semibold text-khartoum-600 hover:bg-sand-100 transition-colors">
-          توسيع ▼
+          توسيع الكل ▼
         </button>
-        <button onClick={collapseAll} title="طي الكل"
+        <button onClick={showMoreGenerations} title="عرض 5 أجيال إضافية"
+          className="px-2.5 py-1 rounded-lg bg-nile-100 border border-nile-200 shadow-sm text-[10px] font-semibold text-nile-700 hover:bg-nile-200 transition-colors">
+          أجيال أكثر +
+        </button>
+        <button onClick={collapseAll} title="طي الفروع وإعادة العمق الافتراضي"
           className="px-2.5 py-1 rounded-lg bg-white/90 border border-sand-200 shadow-sm text-[10px] font-semibold text-khartoum-600 hover:bg-sand-100 transition-colors">
           طي ▲
         </button>
