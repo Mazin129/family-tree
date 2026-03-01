@@ -77,24 +77,49 @@ export const FamilyTreeCanvas = forwardRef<FamilyTreeCanvasHandle, FamilyTreeCan
 
   useImperativeHandle(ref, () => ({
     async exportToPdf(treeName?: string) {
-      if (!containerRef.current) return
+      const svgEl = svgRef.current
+      if (!svgEl) return
       setTooltip(null)
       setIsExporting(true)
       try {
-        const [html2canvasModule, jspdfModule] = await Promise.all([
-          import('html2canvas'),
-          import('jspdf'),
-        ])
-        const html2canvas = html2canvasModule.default
-        const { jsPDF } = jspdfModule
-        const canvas = await html2canvas(containerRef.current, {
-          backgroundColor: '#f5f0e8',
-          scale: 2,
-          useCORS: true,
-          logging: false,
-          allowTaint: true,
+        const { jsPDF } = await import('jspdf')
+        const w = Math.max(svgEl.clientWidth || 960, 400)
+        const h = Math.max(svgEl.clientHeight || 640, 300)
+        const scale = 2
+        const clone = svgEl.cloneNode(true) as SVGSVGElement
+        clone.setAttribute('width', String(w))
+        clone.setAttribute('height', String(h))
+        const serializer = new XMLSerializer()
+        const svgString = serializer.serializeToString(clone)
+        const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' })
+        const url = URL.createObjectURL(blob)
+        const img = new Image()
+        await new Promise<void>((resolve, reject) => {
+          img.onload = () => {
+            URL.revokeObjectURL(url)
+            resolve()
+          }
+          img.onerror = () => {
+            URL.revokeObjectURL(url)
+            reject(new Error('SVG export failed'))
+          }
+          img.src = url
         })
-        const imgData = canvas.toDataURL('image/png')
+        const canvas = document.createElement('canvas')
+        canvas.width = w * scale
+        canvas.height = h * scale
+        const ctx = canvas.getContext('2d')
+        if (!ctx) throw new Error('Canvas not supported')
+        ctx.fillStyle = '#f5f0e8'
+        ctx.fillRect(0, 0, canvas.width, canvas.height)
+        ctx.scale(scale, scale)
+        ctx.drawImage(img, 0, 0, w, h)
+        let imgData: string
+        try {
+          imgData = canvas.toDataURL('image/png')
+        } catch {
+          throw new Error('Export failed (e.g. external images). Try without photos.')
+        }
         const pdf = new jsPDF({
           orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
           unit: 'mm',
@@ -107,11 +132,11 @@ export const FamilyTreeCanvas = forwardRef<FamilyTreeCanvasHandle, FamilyTreeCan
         const contentW = pageW - 2 * margin
         const contentH = pageH - 2 * margin - titleH
         const imgRatio = canvas.width / canvas.height
-        let w = contentW
-        let h = contentW / imgRatio
-        if (h > contentH) {
-          h = contentH
-          w = contentH * imgRatio
+        let imgW = contentW
+        let imgH = contentW / imgRatio
+        if (imgH > contentH) {
+          imgH = contentH
+          imgW = contentH * imgRatio
         }
         const imgY = margin + titleH
         if (treeName) {
@@ -119,7 +144,7 @@ export const FamilyTreeCanvas = forwardRef<FamilyTreeCanvasHandle, FamilyTreeCan
           pdf.setFont('helvetica', 'bold')
           pdf.text(treeName, margin, margin + 6)
         }
-        pdf.addImage(imgData, 'PNG', margin, imgY, w, h)
+        pdf.addImage(imgData, 'PNG', margin, imgY, imgW, imgH)
         const safeName = (treeName || 'family-tree').replace(/[^\w\u0600-\u06FF\s-]/g, '').trim() || 'family-tree'
         pdf.save(`${safeName}.pdf`)
       } finally {
