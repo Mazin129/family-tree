@@ -160,14 +160,28 @@ export function FamilyTreeCanvas({
     defs.append('filter').attr('id', 'tree-card-shadow-sel').attr('x', '-30%').attr('y', '-30%').attr('width', '160%').attr('height', '160%')
       .append('feDropShadow').attr('dx', 0).attr('dy', 2).attr('stdDeviation', 4).attr('flood-color', 'rgba(217,119,6,0.25)')
 
-    // ── Hierarchy & layout (no mutation of nodes) ─────────────────────────
+    // ── Hierarchy & layout ──────────────────────────────────────────────
     const root = d3.hierarchy(filteredTree, (d) => d.children)
     d3.tree<TreeNode & { children?: TreeNode[] }>()
       .nodeSize([NODE_DX, NODE_DY])
-      .separation((a, b) => (a.parent === b.parent ? 1 : 1.15))(root)
+      .separation((a, b) => (a.parent === b.parent ? 1 : 1.1))(root)
 
     const nodes = root.descendants()
     if (nodes.length === 0) return
+
+    // Even horizontal spacing per generation (avoids messy variable gaps from Reingold–Tilford)
+    const byDepth = new Map<number, typeof nodes>()
+    nodes.forEach((n) => {
+      const d = n.depth
+      if (!byDepth.has(d)) byDepth.set(d, [])
+      byDepth.get(d)!.push(n)
+    })
+    byDepth.forEach((levelNodes) => {
+      levelNodes.sort((a, b) => (a.x ?? 0) - (b.x ?? 0))
+      const k = levelNodes.length
+      const startX = -((k - 1) * NODE_DX) / 2
+      levelNodes.forEach((n, i) => { n.x = startX + i * NODE_DX })
+    })
 
     const xs = nodes.map((n) => n.x!)
     const ys = nodes.map((n) => n.y!)
@@ -356,7 +370,7 @@ export function FamilyTreeCanvas({
           .append('text').attr('x', textX).attr('y', nameY + (isExpanded ? 16 : 16))
           .attr('text-anchor', isExpanded ? 'middle' : 'start').attr('font-size', 10)
           .attr('font-family', "'Cairo', sans-serif").attr('fill', '#64748b')
-          .text(clipText(meta.join(' · '), 22))
+          .text(clipText(meta.join(' · '), 28))
       }
 
       const spouseCount = p.spouses?.length ?? 0
