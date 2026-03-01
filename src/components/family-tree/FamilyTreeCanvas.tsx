@@ -22,9 +22,10 @@ interface FamilyTreeCanvasProps {
 
 // ── Layout constants (single source of truth) ─────────────────────────────────
 const CARD_W = 160
-const CARD_H = 64
+const CARD_H = 104
 const CARD_R = 12
 const AVATAR_R = 18
+const LINE_HEIGHT = 14
 
 const EX_CARD_W = 180
 const EX_CARD_H = 130
@@ -360,7 +361,8 @@ export function FamilyTreeCanvas({
       }
 
       const textX = ox + (isExpanded ? w / 2 : 56)
-      const nameY = isExpanded ? avCy + avR + 14 : -6
+      // Compact: name below avatar (avatar y=0, r=18) so name/tribe/† don’t overlap the circle.
+      const nameY = isExpanded ? avCy + avR + 14 : 22
       d3.select(this)
         .append('text').attr('x', textX).attr('y', nameY)
         .attr('text-anchor', isExpanded ? 'middle' : 'start').attr('font-size', isExpanded ? 13 : 12.5).attr('font-weight', '700')
@@ -378,7 +380,7 @@ export function FamilyTreeCanvas({
       const metaStr = meta.filter(Boolean).join(isExpanded ? ' ' : ' · ')
       if (metaStr) {
         d3.select(this)
-          .append('text').attr('x', textX).attr('y', nameY + (isExpanded ? 16 : 16))
+          .append('text').attr('x', textX).attr('y', nameY + LINE_HEIGHT)
           .attr('text-anchor', isExpanded ? 'middle' : 'start').attr('font-size', 10)
           .attr('font-family', "'Cairo', sans-serif").attr('fill', '#64748b')
           .text(clipText(metaStr, 32))
@@ -388,7 +390,7 @@ export function FamilyTreeCanvas({
       if (spouseCount > 0) {
         const spName = displayName(p.spouses![0])
         d3.select(this)
-          .append('text').attr('x', textX).attr('y', nameY + (isExpanded ? 32 : 28))
+          .append('text').attr('x', textX).attr('y', nameY + LINE_HEIGHT * 2)
           .attr('text-anchor', isExpanded ? 'middle' : 'start').attr('font-size', 9)
           .attr('font-family', "'Cairo', sans-serif").attr('fill', '#92400e')
           .text('♥ ' + clipText(spName, 12) + (spouseCount > 1 ? ` +${spouseCount - 1}` : ''))
