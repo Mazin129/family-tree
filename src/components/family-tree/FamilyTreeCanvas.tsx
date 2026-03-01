@@ -138,11 +138,16 @@ export function FamilyTreeCanvas({
       .separation((a, b) => a.parent === b.parent ? 1 : 1.2)(root)
 
     const allNodes = root.descendants()
-    // Swap so depth = horizontal (generations left→right), breadth = vertical (siblings stack)
-    const depthAxis = allNodes.map(n => n.y!)
-    const breadthAxis = allNodes.map(n => n.x!)
-    const treeW = (Math.max(...depthAxis) - Math.min(...depthAxis)) + NS_H
-    const treeH = (Math.max(...breadthAxis) - Math.min(...breadthAxis)) + NS_W
+    // Stagger single-child chains: add horizontal offset by depth so they don't stack in one column
+    const depthBreadth = NS_W * 0.4
+    allNodes.forEach(n => {
+      ;(n as any).x = (n.x ?? 0) + n.depth * depthBreadth
+    })
+    // Standard vertical tree: x = breadth (siblings), y = depth (generations downward)
+    const xs = allNodes.map(n => n.x!)
+    const ys = allNodes.map(n => n.y!)
+    const treeW = (Math.max(...xs) - Math.min(...xs)) + NS_W
+    const treeH = (Math.max(...ys) - Math.min(...ys)) + NS_H
 
     // ── Root group ────────────────────────────────────────────────────────
     const g = svg.append('g')
@@ -165,8 +170,8 @@ export function FamilyTreeCanvas({
       const scaleX = W / (treeW + padX * 2)
       const scaleY = H / (treeH + padY * 2)
       const scale = Math.min(scaleX, scaleY, 1.2)
-      const cx = (Math.min(...depthAxis) + Math.max(...depthAxis)) / 2
-      const cy = (Math.min(...breadthAxis) + Math.max(...breadthAxis)) / 2
+      const cx = (Math.min(...xs) + Math.max(...xs)) / 2
+      const cy = (Math.min(...ys) + Math.max(...ys)) / 2
       const initT = d3.zoomIdentity
         .translate(W / 2, H / 2)
         .scale(scale)
@@ -178,14 +183,14 @@ export function FamilyTreeCanvas({
       svg.call(zoom.transform, transformRef.current)
     }
 
-    // ── Generation info (depth = horizontal = y in d3) ─────────────────────
+    // ── Generation info (depth = vertical y) ────────────────────────────────
     const genMap = new Map<number, number>()
     allNodes.forEach(n => {
       if (!genMap.has(n.depth)) genMap.set(n.depth, n.y!)
     })
     const gens = Array.from(genMap.entries())
       .sort((a, b) => a[0] - b[0])
-      .map(([depth, depthCoord]) => ({ depth, y: depthCoord, label: `الجيل ${depth + 1}` }))
+      .map(([depth, y]) => ({ depth, y, label: `الجيل ${depth + 1}` }))
     setGenerations(gens)
 
     type HNode = d3.HierarchyPointNode<ExtTreeNode>
@@ -200,31 +205,28 @@ export function FamilyTreeCanvas({
       byParent.get(s)!.push(t)
     })
 
-    // Horizontal pedigree: screenX = depth (y), screenY = breadth (x). Connectors go right from parent to vertical spine, then to each child.
+    // Vertical tree: parent above, children below. Connectors: parent bottom → spine → each child top.
     byParent.forEach((children, parent) => {
-      const parentRightX = parent.y + CW / 2 + 8
-      const childLeftX = Math.min(...children.map(c => c.y)) - CW / 2 - 8
-      const midX = (parentRightX + childLeftX) / 2
-      const minChildSy = Math.min(...children.map(c => c.x))
-      const maxChildSy = Math.max(...children.map(c => c.x))
+      const parentBottomY = parent.y + CH / 2 + 8
+      const childTopY = Math.min(...children.map(c => c.y)) - CH / 2 - 8
+      const midY = (parentBottomY + childTopY) / 2
+      const minChildX = Math.min(...children.map(c => c.x))
+      const maxChildX = Math.max(...children.map(c => c.x))
 
       connLayer.append('line')
-        .attr('x1', parent.y + CW / 2 + 8).attr('y1', parent.x)
-        .attr('x2', midX).attr('y2', parent.x)
+        .attr('x1', parent.x).attr('y1', parent.y + CH / 2 + 8)
+        .attr('x2', parent.x).attr('y2', midY)
         .attr('stroke', CONN).attr('stroke-width', C_W).attr('stroke-linecap', 'round')
 
-      const spineTop = Math.min(parent.x, minChildSy)
-      const spineBottom = Math.max(parent.x, maxChildSy)
       connLayer.append('line')
-        .attr('x1', midX).attr('y1', spineTop)
-        .attr('x2', midX).attr('y2', spineBottom)
+        .attr('x1', minChildX).attr('y1', midY)
+        .attr('x2', maxChildX).attr('y2', midY)
         .attr('stroke', CONN).attr('stroke-width', C_W).attr('stroke-linecap', 'round')
 
       children.forEach(child => {
-        const toX = child.y - CW / 2 - 8
         connLayer.append('line')
-          .attr('x1', midX).attr('y1', child.x)
-          .attr('x2', toX).attr('y2', child.x)
+          .attr('x1', child.x).attr('y1', midY)
+          .attr('x2', child.x).attr('y2', child.y - CH / 2 - 8)
           .attr('stroke', CONN).attr('stroke-width', C_W).attr('stroke-linecap', 'round')
       })
     })
@@ -383,13 +385,13 @@ export function FamilyTreeCanvas({
         .attr('fill', c.accent).attr('stroke', 'white').attr('stroke-width', 1.5)
     }
 
-    // ── Node groups (swap: screen x = depth = d.y, screen y = breadth = d.x) ─
+    // ── Node groups (vertical tree: x = breadth, y = depth) ─────────────────
     const nodeGs = g.append('g').attr('class', 'nodes-layer')
       .selectAll<SVGGElement, HNode>('.node')
       .data(allNodes)
       .enter().append('g')
       .attr('class', 'node')
-      .attr('transform', d => `translate(${d.y},${d.x})`)
+      .attr('transform', d => `translate(${d.x},${d.y})`)
       .style('cursor', 'pointer')
 
     nodeGs.each(function(d) {
@@ -522,9 +524,8 @@ export function FamilyTreeCanvas({
               onClick={() => {
                 if (!svgRef.current || !zoomRef.current) return
                 const t = transformRef.current
-                // gen.y is depth coordinate = horizontal axis; center it in view
-                const newX = -(gen.y * t.k) + (svgRef.current.clientWidth / 2)
-                const newT = d3.zoomIdentity.translate(newX, t.y).scale(t.k)
+                const newY = -(gen.y * t.k) + (svgRef.current.clientHeight / 2)
+                const newT = d3.zoomIdentity.translate(t.x, newY).scale(t.k)
                 d3.select(svgRef.current).transition().duration(400).call(zoomRef.current.transform, newT)
               }}
               className="w-7 h-7 rounded-lg bg-white/90 border border-sand-200 shadow-sm flex items-center justify-center text-[10px] font-bold text-khartoum-600 hover:bg-sand-100 transition-colors"
