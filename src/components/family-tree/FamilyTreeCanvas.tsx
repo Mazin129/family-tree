@@ -373,13 +373,13 @@ export function FamilyTreeCanvas({
   return (
     <div
       ref={containerRef}
-      className="relative w-full h-full overflow-hidden select-none"
-      style={{
-        background: '#f0ece4',
-        backgroundImage: 'radial-gradient(circle, #c9bfac 1px, transparent 1px)',
-        backgroundSize: '28px 28px',
-      }}
+      className="relative w-full h-full overflow-hidden select-none tree-canvas-bg"
     >
+      {/* Nile river flowing divider at bottom of tree area */}
+      <div
+        className="absolute bottom-0 left-0 right-0 h-1 z-10 pointer-events-none divider-nile rounded-b-lg"
+        aria-hidden
+      />
       <svg ref={svgRef} className="w-full h-full" style={{ minHeight: 500 }} />
 
       {/* ── Tooltip ──────────────────────────────────────────────────────── */}
