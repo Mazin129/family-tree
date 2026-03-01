@@ -1,9 +1,44 @@
 'use client'
 
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import * as d3 from 'd3'
 import type { TreeNode } from '@/types'
 import { tatweelName } from '@/lib/utils/arabic'
+
+// ── Smart minimize for large trees (50+ people, 3+ generations) ───────────────
+const LARGE_TREE_NODE_THRESHOLD = 20
+const LARGE_TREE_GEN_THRESHOLD = 3
+const DEFAULT_MAX_VISIBLE_DEPTH = 2  // show 2 generations when tree is large
+const FIT_VIEW_NODE_THRESHOLD = 15  // fit-to-view when node count >= this
+
+function countNodesAndDepth(node: TreeNode, depth = 0): { count: number; maxDepth: number } {
+  let count = 1
+  let maxDepth = depth
+  for (const c of node.children ?? []) {
+    const r = countNodesAndDepth(c, depth + 1)
+    count += r.count
+    maxDepth = Math.max(maxDepth, r.maxDepth)
+  }
+  for (const s of node.spouses ?? []) {
+    const r = countNodesAndDepth(s, depth)
+    count += r.count
+    maxDepth = Math.max(maxDepth, r.maxDepth)
+  }
+  return { count, maxDepth }
+}
+
+/** Prune tree so only nodes up to maxDepth (0 = root) are kept; deeper children are hidden. */
+function pruneToDepth(node: TreeNode, maxDepth: number, depth = 0): TreeNode {
+  const out: TreeNode = {
+    ...node,
+    children: undefined,
+    spouses: node.spouses?.map(s => pruneToDepth(s, maxDepth, depth)),
+  }
+  if (depth < maxDepth && node.children?.length) {
+    out.children = node.children.map(c => pruneToDepth(c, maxDepth, depth + 1))
+  }
+  return out
+}
 
 interface FamilyTreeCanvasProps {
   data:         TreeNode
@@ -64,8 +99,14 @@ export function FamilyTreeCanvas({
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [tooltip,    setTooltip]    = useState<{ x: number; y: number; node: TreeNode } | null>(null)
 
+  const treeStats = useMemo(() => (data ? countNodesAndDepth(data) : { count: 0, maxDepth: 0 }), [data])
+  const isLargeTree = treeStats.count >= LARGE_TREE_NODE_THRESHOLD || treeStats.maxDepth >= LARGE_TREE_GEN_THRESHOLD
+  const [maxVisibleDepth, setMaxVisibleDepth] = useState(DEFAULT_MAX_VISIBLE_DEPTH)
+  const effectiveMaxDepth = isLargeTree ? maxVisibleDepth : 999
+  const viewData = useMemo(() => (data ? pruneToDepth(data, effectiveMaxDepth) : data), [data, effectiveMaxDepth])
+
   const draw = useCallback(() => {
-    if (!svgRef.current || !data) return
+    if (!svgRef.current || !viewData) return
     const svg = d3.select(svgRef.current)
     svg.selectAll('*').remove()
 
@@ -92,27 +133,40 @@ export function FamilyTreeCanvas({
       .attr('stdDeviation', 8)
       .attr('flood-color', 'rgba(217,119,6,0.35)')
 
-    // ── Build hierarchy & layout ──────────────────────────────────────────
-    const root = d3.hierarchy<TreeNode>(data, d => d.children)
+    // ── Build hierarchy & layout (using viewData = pruned when tree is large) ─
+    const root = d3.hierarchy<TreeNode>(viewData, d => d.children)
     d3.tree<TreeNode>()
       .nodeSize([NS_W, NS_H])
       .separation((a, b) => a.parent === b.parent ? 1 : 1.3)(root)
 
     const allNodes = root.descendants()
     const xs = allNodes.map(n => n.x!)
+    const ys = allNodes.map(n => n.y!)
     const tx = W / 2 - (Math.min(...xs) + Math.max(...xs)) / 2
     const ty = 80
 
     // ── Root SVG group ────────────────────────────────────────────────────
     const g = svg.append('g').attr('transform', `translate(${tx},${ty})`)
 
-    // ── Zoom ──────────────────────────────────────────────────────────────
+    // ── Zoom; fit to view when tree is large ───────────────────────────────
     const zoom = d3.zoom<SVGSVGElement, unknown>()
       .scaleExtent([0.08, 3])
       .on('zoom', e => g.attr('transform', e.transform.toString()))
     zoomRef.current = zoom
     svg.call(zoom)
-    svg.call(zoom.transform, d3.zoomIdentity.translate(tx, ty))
+
+    const nodeCount = allNodes.length
+    const padding = 80
+    const treeW = Math.max(...xs) - Math.min(...xs) + CW + H_GAP + padding
+    const treeH = Math.max(...ys) - Math.min(...ys) + CH + V_STR + padding
+    const fitScale = Math.min(W / treeW, H / treeH, 1)
+    const shouldFit = nodeCount >= FIT_VIEW_NODE_THRESHOLD && fitScale < 1
+    const cx = (Math.min(...xs) + Math.max(...xs)) / 2
+    const cy = (Math.min(...ys) + Math.max(...ys)) / 2
+    const initialTransform = shouldFit
+      ? d3.zoomIdentity.translate(W / 2 - cx * fitScale, H / 2 - cy * fitScale).scale(fitScale)
+      : d3.zoomIdentity.translate(tx, ty)
+    svg.call(zoom.transform, initialTransform)
 
     type HNode = d3.HierarchyPointNode<TreeNode>
 
@@ -349,7 +403,7 @@ export function FamilyTreeCanvas({
       })
 
     svg.on('click', () => { setSelectedId(null); setTooltip(null) })
-  }, [data, selectedId, language, readOnly, onNodeClick, onNodeAdd])
+  }, [viewData, selectedId, language, readOnly, onNodeClick, onNodeAdd])
 
   useEffect(() => { draw() }, [draw])
 
@@ -424,6 +478,33 @@ export function FamilyTreeCanvas({
               <span>†</span> رحل إلى رحمة الله
             </p>
           )}
+        </div>
+      )}
+
+      {/* ── Generation controls (when tree is large: 3+ gen or 20+ people) ─── */}
+      {isLargeTree && (
+        <div className="absolute bottom-6 left-4 right-24 flex justify-center" dir="rtl">
+          <div className="bg-white/95 backdrop-blur-sm rounded-xl px-4 py-2 border border-sand-200 shadow-md flex items-center gap-3">
+            <span className="text-xs text-khartoum-500">
+              عرض {maxVisibleDepth + 1} من {treeStats.maxDepth + 1} جيل
+            </span>
+            <button
+              type="button"
+              onClick={() => setMaxVisibleDepth(d => Math.min(d + 1, treeStats.maxDepth))}
+              disabled={maxVisibleDepth >= treeStats.maxDepth}
+              className="text-sm font-medium text-sand-700 hover:text-sand-900 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              أجيال أكثر
+            </button>
+            <button
+              type="button"
+              onClick={() => setMaxVisibleDepth(d => Math.max(0, d - 1))}
+              disabled={maxVisibleDepth <= 0}
+              className="text-sm font-medium text-sand-700 hover:text-sand-900 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              أجيال أقل
+            </button>
+          </div>
         </div>
       )}
 
