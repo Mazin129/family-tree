@@ -3,17 +3,27 @@
 @tailwind utilities;
 
 /* ──────────────────────────────────────────────
-   CSS Custom Properties – Sudanese Design Tokens
+   CSS Custom Properties – UNESCO Sudanese Heritage
    ────────────────────────────────────────────── */
 :root {
-  --color-primary:    #d4922d;
-  --color-primary-dk: #8f5420;
-  --color-nile:       #1a75e8;
-  --color-sand-light: #fdf8f0;
-  --color-text:       #18181b;
+  /* Primary — Nubian / Desert */
+  --color-desert:     #CFAE70;
+  --color-nubian:     #B87A3B;
+  --color-nile:       #1E5F74;
+  /* Secondary */
+  --color-coral:      #C94C4C;
+  --color-palm:       #4E7C59;
+  --color-bronze:     #8C6239;
+  /* Legacy aliases */
+  --color-primary:    #CFAE70;
+  --color-primary-dk: #B87A3B;
+  --color-sand-light: #faf6ed;
+  --color-text:       #1a281e;
   --radius-card:      1rem;
-  --shadow-card:      0 2px 15px -3px rgba(0,0,0,.10),0 10px 20px -2px rgba(0,0,0,.04);
+  --shadow-card:      0 2px 15px -3px rgba(0,0,0,.08), 0 10px 20px -2px rgba(0,0,0,.04);
+  --shadow-pyramid:   0 4px 24px -4px rgba(184, 122, 59, 0.4);
   --font-arabic:      'Cairo', 'Amiri', sans-serif;
+  --font-display:     'Amiri', 'Playfair Display', Georgia, serif;
 }
 
 /* ──────────────────────────────────────────────
@@ -31,11 +41,11 @@
    ────────────────────────────────────────────── */
 @layer base {
   * {
-    @apply border-khartoum-200;
+    @apply border-nubian-200;
   }
 
   body {
-    @apply bg-sand-50 text-khartoum-900;
+    @apply bg-desert-50 text-nubian-900;
     font-feature-settings: "rlig" 1, "calt" 1;
   }
 
@@ -60,38 +70,38 @@
    Component Classes
    ────────────────────────────────────────────── */
 @layer components {
-  /* Cards */
+  /* Cards (temple column–inspired) */
   .card {
-    @apply bg-white rounded-2xl shadow-card border border-sand-100 overflow-hidden;
+    @apply bg-white rounded-2xl shadow-card border border-nubian-100 overflow-hidden;
   }
   .card-hover {
-    @apply card transition-all duration-200 hover:shadow-heritage hover:-translate-y-0.5;
+    @apply card transition-all duration-200 hover:shadow-pyramid hover:-translate-y-0.5;
   }
 
   /* Buttons */
   .btn-primary {
     @apply inline-flex items-center justify-center gap-2
-           bg-sand-500 hover:bg-sand-600 text-white font-medium
+           bg-gradient-to-r from-nubian-500 to-nubian-600 hover:opacity-95 text-white font-medium
            px-5 py-2.5 rounded-xl transition-all duration-200
-           shadow-sm hover:shadow-heritage focus:outline-none
-           focus:ring-2 focus:ring-sand-400 focus:ring-offset-2
+           shadow-pyramid hover:shadow-lg focus:outline-none
+           focus:ring-2 focus:ring-nubian-400 focus:ring-offset-2
            disabled:opacity-50 disabled:cursor-not-allowed;
   }
   .btn-secondary {
     @apply inline-flex items-center justify-center gap-2
-           bg-white hover:bg-sand-50 text-khartoum-800
-           border border-sand-200 hover:border-sand-300
+           bg-white hover:bg-desert-50 text-nubian-800
+           border border-nubian-200 hover:border-nubian-300
            font-medium px-5 py-2.5 rounded-xl transition-all duration-200
-           focus:outline-none focus:ring-2 focus:ring-sand-300;
+           focus:outline-none focus:ring-2 focus:ring-nubian-300;
   }
   .btn-ghost {
     @apply inline-flex items-center justify-center gap-2
-           text-khartoum-600 hover:text-khartoum-900 hover:bg-sand-100
+           text-nubian-600 hover:text-nubian-900 hover:bg-desert-100
            font-medium px-4 py-2 rounded-xl transition-all duration-200;
   }
   .zoom-btn {
-    @apply w-9 h-9 bg-white/95 backdrop-blur-sm rounded-xl border border-sand-200 shadow-sm
-           flex items-center justify-center text-khartoum-600 hover:bg-sand-50
+    @apply w-9 h-9 bg-white/95 backdrop-blur-sm rounded-xl border border-nubian-200 shadow-sm
+           flex items-center justify-center text-nubian-600 hover:bg-desert-50
            transition-colors font-bold text-base select-none;
   }
   .btn-danger {
@@ -102,9 +112,9 @@
 
   /* Form inputs */
   .input {
-    @apply w-full rounded-xl border border-khartoum-200 bg-white px-4 py-2.5
-           text-khartoum-900 placeholder-khartoum-400
-           focus:outline-none focus:ring-2 focus:ring-sand-400 focus:border-transparent
+    @apply w-full rounded-xl border border-nubian-200 bg-white px-4 py-2.5
+           text-nubian-900 placeholder-nubian-400
+           focus:outline-none focus:ring-2 focus:ring-nubian-300 focus:border-transparent
            transition-all duration-200;
   }
   .input-arabic {
@@ -112,23 +122,23 @@
     direction: rtl;
   }
   .label {
-    @apply block text-sm font-medium text-khartoum-700 mb-1.5;
+    @apply block text-sm font-medium text-nubian-700 mb-1.5;
   }
 
   /* Badge */
   .badge {
     @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
   }
-  .badge-sand  { @apply badge bg-sand-100 text-sand-800; }
+  .badge-sand  { @apply badge bg-desert-100 text-nubian-800; }
   .badge-nile  { @apply badge bg-nile-100 text-nile-800; }
-  .badge-green { @apply badge bg-acacia-100 text-acacia-800; }
+  .badge-green { @apply badge bg-palm-100 text-palm-800; }
 
   /* Section heading */
   .section-title {
-    @apply text-2xl font-bold text-khartoum-900;
+    @apply text-2xl font-bold text-nubian-900 font-display;
   }
   .section-subtitle {
-    @apply text-khartoum-500 mt-1;
+    @apply text-nubian-600 mt-1;
   }
 
   /* Heritage divider */
@@ -137,32 +147,32 @@
   }
   .divider-heritage::before,
   .divider-heritage::after {
-    @apply flex-1 border-t border-sand-200 content-[''];
+    @apply flex-1 border-t border-nubian-200 content-[''];
   }
   .divider-heritage span {
-    @apply mx-3 text-sand-400 text-sm;
+    @apply mx-3 text-nubian-500 text-sm;
   }
 
-  /* Navigation link */
+  /* Navigation link (Nubian / temple column feel) */
   .nav-link {
     @apply flex items-center gap-2.5 px-4 py-2.5 rounded-xl
-           text-khartoum-600 hover:text-sand-700 hover:bg-sand-50
+           text-nubian-600 hover:text-nubian-800 hover:bg-desert-50
            font-medium transition-all duration-200 text-sm;
   }
   .nav-link-active {
-    @apply nav-link bg-sand-50 text-sand-700 border border-sand-200;
+    @apply nav-link bg-desert-50 text-nubian-800 border border-nubian-200;
   }
 
-  /* Family tree node */
+  /* Family tree node (Kushite seal–inspired) */
   .tree-node {
-    @apply relative bg-white rounded-2xl border-2 border-sand-200
+    @apply relative bg-white rounded-2xl border-2 border-nubian-200
            shadow-card cursor-pointer transition-all duration-200
-           hover:border-sand-400 hover:shadow-heritage;
+           hover:border-nubian-400 hover:shadow-pyramid;
   }
   .tree-node-male   { @apply tree-node border-nile-300; }
-  .tree-node-female { @apply tree-node border-sahara-300; }
+  .tree-node-female { @apply tree-node border-coral-200; }
   .tree-node-selected {
-    @apply border-sand-500 ring-2 ring-sand-300 ring-offset-1;
+    @apply border-nubian-500 ring-2 ring-nubian-300 ring-offset-1;
   }
 
   /* Page container */
@@ -173,10 +183,37 @@
     @apply py-8 border-b border-sand-200;
   }
 
-  /* Cultural pattern overlay */
+  /* Nubian geometric pattern overlay */
   .pattern-overlay {
-    background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23d4922d' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg width='48' height='48' viewBox='0 0 48 48' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0h24v24H0V0zm24 24h24v24H24V24z' fill='%23B87A3B' fill-opacity='0.04' fill-rule='evenodd'/%3E%3Cpath d='M24 8l-4 4 4 4 4-4-4-4zm0 16l-4 4 4 4 4-4-4-4zM8 24l4-4 4 4-4 4-4-4zm16 0l4-4 4 4-4 4-4-4z' fill='%23CFAE70' fill-opacity='0.06'/%3E%3C/svg%3E");
   }
+  /* Sand texture (subtle noise) */
+  .texture-sand {
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+  }
+  /* Temple column accent (left or right edge on cards) */
+  .card-column-accent {
+    border-inline-start: 4px solid var(--color-nubian);
+    border-radius: 0 1rem 1rem 0;
+  }
+  [dir='rtl'] .card-column-accent {
+    border-inline-start: none;
+    border-inline-end: 4px solid var(--color-nubian);
+    border-radius: 1rem 0 0 1rem;
+  }
+  /* Nile divider — flowing line between sections */
+  .divider-nile {
+    height: 3px;
+    background: linear-gradient(90deg, transparent 0%, var(--color-nile) 20%, var(--color-desert) 50%, var(--color-nile) 80%, transparent 100%);
+    background-size: 200% 100%;
+    animation: nileFlowBg 6s ease-in-out infinite;
+    opacity: 0.6;
+  }
+}
+
+@keyframes nileFlowBg {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
 }
 
 /* ──────────────────────────────────────────────

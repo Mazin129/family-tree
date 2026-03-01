@@ -65,18 +65,18 @@ export function Sidebar({ user }: SidebarProps) {
   ]
 
   return (
-    <aside className="hidden lg:flex w-64 flex-col bg-white border-sand-200 h-screen sticky top-0 overflow-y-auto"
+    <aside className="hidden lg:flex w-64 flex-col bg-white border-nubian-200/60 h-screen sticky top-0 overflow-y-auto shadow-sm"
       style={{ borderInlineEndWidth: '1px', borderInlineEndStyle: 'solid' }}
     >
-      {/* Logo */}
-      <div className="p-6 border-b border-sand-100">
+      {/* Logo (pyramid-inspired icon block) */}
+      <div className="p-6 border-b border-nubian-100">
         <Link href="/dashboard" className="flex items-center gap-2.5">
-          <div className="w-9 h-9 bg-gradient-heritage rounded-xl flex items-center justify-center shadow-heritage">
+          <div className="w-9 h-9 bg-gradient-heritage rounded-xl flex items-center justify-center shadow-pyramid">
             <TreePine className="w-5 h-5 text-white" />
           </div>
           <div>
-            <div className="font-bold text-khartoum-900 text-sm leading-tight">{t('brand_name')}</div>
-            <div className="text-xs text-khartoum-400 leading-tight">{t('brand_subtitle')}</div>
+            <div className="font-display font-bold text-nubian-900 text-sm leading-tight">{t('brand_name')}</div>
+            <div className="text-xs text-nubian-500 leading-tight">{t('brand_subtitle')}</div>
           </div>
         </Link>
       </div>
@@ -89,7 +89,7 @@ export function Sidebar({ user }: SidebarProps) {
       </nav>
 
       {/* Bottom */}
-      <div className="p-4 border-t border-sand-100 space-y-1">
+      <div className="p-4 border-t border-nubian-100 space-y-1">
         {BOTTOM_ITEMS.map(item => (
           <Link
             key={item.href}
@@ -102,7 +102,7 @@ export function Sidebar({ user }: SidebarProps) {
         ))}
         <button
           onClick={() => signOut({ callbackUrl: '/login' })}
-          className="nav-link w-full text-red-500 hover:bg-red-50 hover:text-red-600"
+          className="nav-link w-full text-coral-600 hover:bg-coral-50 hover:text-coral-700"
           style={{ textAlign: 'inherit' }}
         >
           <LogOut className="w-4 h-4" />
@@ -117,22 +117,22 @@ export function Sidebar({ user }: SidebarProps) {
 
       {/* Version */}
       <div className="px-4 pb-2 text-center">
-        <span className="text-xs text-khartoum-300">v{process.env.NEXT_PUBLIC_APP_VERSION}</span>
+        <span className="text-xs text-nubian-400">v{process.env.NEXT_PUBLIC_APP_VERSION}</span>
       </div>
 
       {/* User card */}
-      <div className="p-4 border-t border-sand-100">
-        <div className="flex items-center gap-3 p-3 rounded-xl bg-sand-50">
-          <div className="w-9 h-9 rounded-full bg-gradient-heritage flex items-center justify-center text-white font-semibold text-sm shrink-0">
+      <div className="p-4 border-t border-nubian-100">
+        <div className="flex items-center gap-3 p-3 rounded-xl bg-desert-50 border border-nubian-100">
+          <div className="w-9 h-9 rounded-full bg-gradient-heritage flex items-center justify-center text-white font-semibold text-sm shrink-0 shadow-sm">
             {(user.name || user.nameArabic || t('default_user')).charAt(0).toUpperCase()}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-sm font-medium text-khartoum-900 truncate">
+            <div className="text-sm font-medium text-nubian-900 truncate">
               {locale === 'ar'
                 ? (user.nameArabic || user.name || t('default_user'))
                 : (user.name || user.nameArabic || t('default_user'))}
             </div>
-            <div className="text-xs text-khartoum-400 truncate">{user.email}</div>
+            <div className="text-xs text-nubian-500 truncate">{user.email}</div>
           </div>
         </div>
       </div>
@@ -158,11 +158,11 @@ function NavItem({
         <item.icon className="w-4 h-4 shrink-0" />
         <span className="flex-1">{item.label}</span>
         {item.badge && (
-          <span className="badge-sand text-xs">{item.badge}</span>
+          <span className="badge bg-desert-100 text-nubian-700 text-xs">{item.badge}</span>
         )}
       </Link>
       {item.children && isActive && (
-        <div className="ms-6 mt-1 space-y-1 border-s-2 border-sand-200 ps-3">
+        <div className="ms-6 mt-1 space-y-1 border-s-2 border-nubian-200 ps-3">
           {item.children.map(child => (
             <Link
               key={child.href}
@@ -170,8 +170,8 @@ function NavItem({
               className={cn(
                 'block text-sm py-1.5 px-2 rounded-lg transition-colors',
                 pathname === child.href
-                  ? 'text-sand-700 font-medium'
-                  : 'text-khartoum-500 hover:text-khartoum-800'
+                  ? 'text-nubian-700 font-medium'
+                  : 'text-nubian-600 hover:text-nubian-800'
               )}
             >
               {child.label}
