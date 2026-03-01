@@ -1,5 +1,11 @@
 'use client'
 
+/**
+ * Family Tree Canvas — primary visualization for the Sudan Heritage Platform.
+ * Layout: expandable vertical pedigree (root top, generations down, even horizontal spacing).
+ * See docs/FAMILY_TREE_VISUALIZATION_DESIGN.md for research, concepts, and UX.
+ */
+
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import * as d3 from 'd3'
 import type { TreeNode } from '@/types'
@@ -129,10 +135,10 @@ export function FamilyTreeCanvas({
     })
   }, [])
 
-  const filteredTree = useMemo(
-    () => filterByDepthAndCollapsed(data, collapsed, 0, maxDepth),
-    [data, collapsed, maxDepth]
-  )
+  const filteredTree = useMemo(() => {
+    if (!data?.id) return null
+    return filterByDepthAndCollapsed(data, collapsed, 0, maxDepth)
+  }, [data, collapsed, maxDepth])
 
   // When tree data identity changes (e.g. switch to subtree), fit again on next draw
   const dataIdRef = useRef(data?.id)
@@ -145,7 +151,7 @@ export function FamilyTreeCanvas({
 
   const draw = useCallback(() => {
     const svgEl = svgRef.current
-    if (!svgEl || !filteredTree) return
+    if (!svgEl || !filteredTree || !data?.id) return
 
     const svg = d3.select(svgEl)
     svg.selectAll('*').remove()
@@ -363,14 +369,19 @@ export function FamilyTreeCanvas({
 
       const meta: string[] = []
       if (p.tribe) meta.push(p.tribe)
-      if (p.birthYear) meta.push(String(p.birthYear))
-      if (!p.isAlive) meta.push('†')
-      if (meta.length) {
+      if (isExpanded && p.birthYear != null && p.deathYear != null) {
+        meta.push(`${p.birthYear} – ${p.deathYear}`)
+      } else if (p.birthYear != null) {
+        meta.push(String(p.birthYear))
+      }
+      if (!p.isAlive && !meta.some((m) => m.includes('†'))) meta.push('†')
+      const metaStr = meta.filter(Boolean).join(isExpanded ? ' ' : ' · ')
+      if (metaStr) {
         d3.select(this)
           .append('text').attr('x', textX).attr('y', nameY + (isExpanded ? 16 : 16))
           .attr('text-anchor', isExpanded ? 'middle' : 'start').attr('font-size', 10)
           .attr('font-family', "'Cairo', sans-serif").attr('fill', '#64748b')
-          .text(clipText(meta.join(' · '), 28))
+          .text(clipText(metaStr, 32))
       }
 
       const spouseCount = p.spouses?.length ?? 0
@@ -460,9 +471,17 @@ export function FamilyTreeCanvas({
     setMaxDepth((d) => Math.min(d + 5, MAX_DEPTH_LIMIT))
   }, [])
 
+  if (!data?.id) {
+    return (
+      <div ref={containerRef} className="relative w-full h-full flex items-center justify-center bg-sand-50/80" aria-live="polite">
+        <p className="text-khartoum-500 text-sm" dir="rtl">لا توجد بيانات للشجرة</p>
+      </div>
+    )
+  }
+
   return (
     <div ref={containerRef} className="relative w-full h-full overflow-hidden select-none bg-sand-50/80">
-      <svg ref={svgRef} className="w-full h-full block" style={{ minHeight: 400 }} aria-label="شجرة العائلة" />
+      <svg ref={svgRef} className="w-full h-full block" style={{ minHeight: 400 }} aria-label="شجرة العائلة" role="img" />
 
       {generations.length > 1 && (
         <div className="absolute top-1/2 right-2 -translate-y-1/2 flex flex-col gap-1 z-20" dir="rtl">
@@ -479,6 +498,7 @@ export function FamilyTreeCanvas({
               }}
               className="w-8 h-8 rounded-lg bg-white/95 border border-sand-200 shadow-sm flex items-center justify-center text-xs font-bold text-khartoum-600 hover:bg-sand-100"
               title={gen.label}
+              aria-label={gen.label}
             >
               {gen.depth + 1}
             </button>
@@ -497,6 +517,7 @@ export function FamilyTreeCanvas({
             type="button"
             onClick={b.fn}
             title={b.title}
+            aria-label={b.title}
             className="w-10 h-10 rounded-xl bg-white/95 border border-sand-200 shadow-md flex items-center justify-center text-khartoum-600 hover:bg-white font-bold text-sm"
           >
             {b.label}
@@ -509,6 +530,7 @@ export function FamilyTreeCanvas({
           type="button"
           onClick={expandAll}
           title="عرض كل المستويات حتى 30"
+          aria-label="توسيع الكل — عرض كل المستويات حتى 30"
           className="px-3 py-1.5 rounded-lg bg-white/95 border border-sand-200 shadow-sm text-xs font-semibold text-khartoum-600 hover:bg-sand-100"
         >
           توسيع الكل
@@ -517,6 +539,7 @@ export function FamilyTreeCanvas({
           type="button"
           onClick={showMoreLevels}
           title="إضافة 5 مستويات"
+          aria-label="أجيال أكثر — إضافة 5 مستويات"
           className="px-3 py-1.5 rounded-lg bg-nile-100 border border-nile-200 text-xs font-semibold text-nile-700 hover:bg-nile-200"
         >
           أجيال +
@@ -525,6 +548,7 @@ export function FamilyTreeCanvas({
           type="button"
           onClick={collapseAll}
           title="طي الفروع"
+          aria-label="طي الفروع"
           className="px-3 py-1.5 rounded-lg bg-white/95 border border-sand-200 shadow-sm text-xs font-semibold text-khartoum-600 hover:bg-sand-100"
         >
           طي
@@ -533,11 +557,13 @@ export function FamilyTreeCanvas({
 
       <div className="absolute bottom-4 left-3 bg-white/95 rounded-xl px-3 py-2 border border-sand-100 shadow-sm z-20" dir="rtl">
         <div className="flex flex-wrap gap-x-3 gap-y-1">
-          <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-blue-500" /> ذكر</span>
-          <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-pink-500" /> أنثى</span>
-          <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-slate-400" /> متوفى</span>
+          <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: MALE_ACCENT }} aria-hidden /> ذكر</span>
+          <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: FEMALE_ACCENT }} aria-hidden /> أنثى</span>
+          <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: DEAD_ACCENT }} aria-hidden /> متوفى</span>
         </div>
-        <p className="text-[10px] text-khartoum-400 mt-1.5 pt-1.5 border-t border-sand-100">نقر مزدوج = عرض الفرع</p>
+        <p className="text-[10px] text-khartoum-400 mt-1.5 pt-1.5 border-t border-sand-100">
+          ♥ زوج/زوجة · ▼ فرع مطوي · نقر مزدوج = عرض الفرع
+        </p>
       </div>
 
       <div className="absolute top-3 left-3 bg-white/90 rounded-lg px-2.5 py-1.5 border border-sand-200 shadow-sm text-[11px] font-medium text-khartoum-500 tabular-nums z-10" title="مستوى التكبير">
