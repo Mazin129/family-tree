@@ -99,16 +99,6 @@ export function FamilyTreeCanvas({
   const [selectedId,  setSelectedId]  = useState<string | null>(null)
   const [collapsed,   setCollapsed]   = useState<Set<string>>(new Set())
   const [zoomLevel,   setZoomLevel]   = useState(1)
-  const [generations, setGenerations] = useState<{ depth: number; y: number; label: string }[]>([])
-
-  const toggleCollapse = useCallback((nodeId: string) => {
-    setCollapsed(prev => {
-      const next = new Set(prev)
-      if (next.has(nodeId)) next.delete(nodeId)
-      else next.add(nodeId)
-      return next
-    })
-  }, [])
 
   const filteredData = useMemo(() => {
     return filterCollapsed(data, collapsed, 0, DEFAULT_EXPAND_DEPTH)
@@ -176,16 +166,6 @@ export function FamilyTreeCanvas({
     } else {
       svg.call(zoom.transform, transformRef.current)
     }
-
-    // ── Generation info ───────────────────────────────────────────────────
-    const genMap = new Map<number, number>()
-    allNodes.forEach(n => {
-      if (!genMap.has(n.depth)) genMap.set(n.depth, n.y!)
-    })
-    const gens = Array.from(genMap.entries())
-      .sort((a, b) => a[0] - b[0])
-      .map(([depth, y]) => ({ depth, y, label: `الجيل ${depth + 1}` }))
-    setGenerations(gens)
 
     type HNode = d3.HierarchyPointNode<ExtTreeNode>
 
@@ -402,38 +382,8 @@ export function FamilyTreeCanvas({
         renderCompactCard(this, person, -CW / 2, isSel)
       }
 
-      // ── Collapse/expand toggle ────────────────────────────────────────
       const node = person as ExtTreeNode
-      const hasKids = (node._collapsed && (node._childCount ?? 0) > 0) || (node.children && node.children.length > 0)
-      if (hasKids) {
-        const cardH = z >= ZOOM_EXPANDED ? EX_CH : CH
-        const btnY = cardH / 2 + 4
-        const badge = d3.select(this).append('g')
-          .attr('transform', `translate(0,${btnY})`)
-          .style('cursor', 'pointer')
-          .on('click', (ev) => {
-            ev.stopPropagation()
-            toggleCollapse(person.id)
-          })
-
-        if (node._collapsed) {
-          badge.append('rect')
-            .attr('x', -24).attr('y', -10).attr('width', 48).attr('height', 20).attr('rx', 10)
-            .attr('fill', '#d4922d').attr('stroke', 'white').attr('stroke-width', 1.5)
-          badge.append('text')
-            .attr('x', 0).attr('y', 5).attr('text-anchor', 'middle')
-            .attr('font-size', 10).attr('font-weight', '700').attr('fill', 'white')
-            .attr('font-family', "'Cairo', sans-serif")
-            .text(`▼ ${node._childCount ?? ''}`)
-        } else {
-          badge.append('circle')
-            .attr('r', 10).attr('fill', '#e2e8f0').attr('stroke', '#94a3b8').attr('stroke-width', 1)
-          badge.append('text')
-            .attr('x', 0).attr('y', 4).attr('text-anchor', 'middle')
-            .attr('font-size', 11).attr('font-weight', '700').attr('fill', '#475569')
-            .text('▲')
-        }
-      }
+      const hasKids = (node.children && node.children.length > 0)
 
       // ── Add button ────────────────────────────────────────────────────
       if (!readOnly && !node._collapsed) {
@@ -471,7 +421,7 @@ export function FamilyTreeCanvas({
       })
 
     svg.on('click', () => { setSelectedId(null) })
-  }, [filteredData, selectedId, language, readOnly, onNodeClick, onNodeAdd, onViewSubtree, toggleCollapse, zoomLevel])
+  }, [filteredData, selectedId, language, readOnly, onNodeClick, onNodeAdd, onViewSubtree, zoomLevel])
 
   useEffect(() => { draw() }, [draw])
 
@@ -505,32 +455,6 @@ export function FamilyTreeCanvas({
   return (
     <div ref={containerRef} className="relative w-full h-full overflow-hidden select-none tree-canvas-bg">
       <svg ref={svgRef} className="w-full h-full" style={{ minHeight: 500 }} />
-
-      {/* ── Generation navigator (right strip) ──────────────────────────── */}
-      {generations.length > 1 && (
-        <div
-          className="absolute top-1/2 right-2 -translate-y-1/2 flex flex-col gap-1 z-20"
-          dir="rtl"
-        >
-          {generations.map((gen) => (
-            <button
-              key={gen.depth}
-              type="button"
-              onClick={() => {
-                if (!svgRef.current || !zoomRef.current) return
-                const t = transformRef.current
-                const newY = -(gen.y * t.k) + (svgRef.current.clientHeight / 2)
-                const newT = d3.zoomIdentity.translate(t.x, newY).scale(t.k)
-                d3.select(svgRef.current).transition().duration(400).call(zoomRef.current.transform, newT)
-              }}
-              className="w-7 h-7 rounded-lg bg-white/90 border border-sand-200 shadow-sm flex items-center justify-center text-[10px] font-bold text-khartoum-600 hover:bg-sand-100 transition-colors"
-              title={gen.label}
-            >
-              {gen.depth + 1}
-            </button>
-          ))}
-        </div>
-      )}
 
       {/* ── Zoom controls ──────────────────────────────────────────────── */}
       <div className="absolute bottom-5 right-5 flex flex-col gap-1.5 z-20" dir="ltr">
