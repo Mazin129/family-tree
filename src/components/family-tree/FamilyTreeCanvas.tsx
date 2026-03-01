@@ -14,35 +14,30 @@ interface FamilyTreeCanvasProps {
   readOnly?:    boolean
 }
 
-// ── Compact card dimensions ──────────────────────────────────────────────────
-const CW  = 160
-const CH  = 64
-const CR  = 12
-const AVR = 18
+// ── Layout constants (single source of truth) ─────────────────────────────────
+const CARD_W = 160
+const CARD_H = 64
+const CARD_R = 12
+const AVATAR_R = 18
 
-// ── Expanded card (zoomed in) ────────────────────────────────────────────────
-const EX_CW = 180
-const EX_CH = 130
-const EX_AVR = 28
+const EX_CARD_W = 180
+const EX_CARD_H = 130
+const EX_AVATAR_R = 28
 
-// ── Spacing ──────────────────────────────────────────────────────────────────
-const SP_GAP = 16
-const H_GAP  = 40
-const V_STR  = 120
+// Node spacing for d3.tree: [horizontal between siblings, vertical between generations]
+const NODE_DX = 200
+const NODE_DY = 100
 
-const NS_W = CW * 2 + SP_GAP + H_GAP
-const NS_H = V_STR
+// Connector: use max card height so lines never overlap cards at any zoom
+const CONN_CARD_HALF = Math.max(CARD_H, EX_CARD_H) / 2
+const CONN_GAP = 10
 
-// ── Zoom thresholds for semantic zoom ────────────────────────────────────────
-const ZOOM_EXPANDED = 0.7
-const ZOOM_COMPACT  = 0.25
-// > ZOOM_EXPANDED  → expanded card with details
-// ZOOM_COMPACT..ZOOM_EXPANDED → compact card (name only)
-// < ZOOM_COMPACT → dot/pill mode
+// Semantic zoom: card style by scale
+const ZOOM_DOT = 0.22
+const ZOOM_EXPANDED = 0.65
 
-// ── Colours ──────────────────────────────────────────────────────────────────
-const CONN  = '#b8a898'
-const C_W   = 1.5
+const CONN_COLOR = '#b8a898'
+const CONN_WIDTH = 1.5
 
 const MALE_BG     = '#dbeafe'
 const MALE_BORDER = '#93c5fd'
@@ -62,143 +57,172 @@ const DEAD_ACCENT = '#94a3b8'
 const DEAD_AV_BG  = '#e2e8f0'
 const DEAD_TEXT   = '#334155'
 
-const DEFAULT_EXPAND_DEPTH = 10
-const MAX_DEPTH_EXPAND_ALL = 25
+const DEFAULT_MAX_DEPTH = 8
+const MAX_DEPTH_LIMIT = 30
 
-function countChildren(node: TreeNode): number {
-  return (node.children?.length ?? 0) + (node.children?.reduce((s, c) => s + countChildren(c), 0) ?? 0)
+type SemanticZoomMode = 'dot' | 'compact' | 'expanded'
+
+function getSemanticMode(k: number): SemanticZoomMode {
+  if (k < ZOOM_DOT) return 'dot'
+  if (k >= ZOOM_EXPANDED) return 'expanded'
+  return 'compact'
 }
 
-function filterCollapsed(node: TreeNode, collapsed: Set<string>, depth: number, maxDepth: number): TreeNode {
-  const isCollapsed = collapsed.has(node.id) || depth >= maxDepth
-  const childCount = countChildren(node)
-  if (isCollapsed || !node.children?.length) {
-    return { ...node, children: undefined, _collapsed: childCount > 0, _childCount: childCount }
+function countDescendants(node: TreeNode): number {
+  const n = node.children?.length ?? 0
+  return n + (node.children?.reduce((s, c) => s + countDescendants(c), 0) ?? 0)
+}
+
+function filterByDepthAndCollapsed(
+  node: TreeNode,
+  collapsedIds: Set<string>,
+  depth: number,
+  maxDepth: number
+): TreeNode & { _collapsed?: boolean; _childCount?: number } {
+  const totalBelow = countDescendants(node)
+  const hideChildren = collapsedIds.has(node.id) || depth >= maxDepth
+  if (hideChildren || !node.children?.length) {
+    return { ...node, children: undefined, _collapsed: totalBelow > 0, _childCount: totalBelow }
   }
   return {
     ...node,
-    children: node.children.map(c => filterCollapsed(c, collapsed, depth + 1, maxDepth)),
+    children: node.children.map((c) =>
+      filterByDepthAndCollapsed(c, collapsedIds, depth + 1, maxDepth)
+    ),
     _collapsed: false,
   }
 }
 
-interface ExtTreeNode extends TreeNode {
-  _collapsed?: boolean
-  _childCount?: number
+function clipText(s: string, maxLen: number): string {
+  const m = Math.max(2, maxLen)
+  return s.length > m ? s.slice(0, m - 1) + '…' : s
 }
 
 export function FamilyTreeCanvas({
-  data, onNodeClick, onNodeAdd, onViewSubtree, language = 'ar', readOnly = false,
+  data,
+  onNodeClick,
+  onNodeAdd,
+  onViewSubtree,
+  language = 'ar',
+  readOnly = false,
 }: FamilyTreeCanvasProps) {
-  const svgRef       = useRef<SVGSVGElement>(null)
+  const svgRef = useRef<SVGSVGElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
-  const zoomRef      = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null)
-  const transformRef = useRef<d3.ZoomTransform>(d3.zoomIdentity)
-  const initialFitDone = useRef(false)
-  const gRef         = useRef<SVGGElement | null>(null)
+  const zoomBehaviorRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null)
+  const transformRef = useRef(d3.zoomIdentity)
+  const didInitialFit = useRef(false)
+  const lastSemanticModeRef = useRef<SemanticZoomMode | null>(null)
 
-  const [selectedId,  setSelectedId]  = useState<string | null>(null)
-  const [collapsed,   setCollapsed]   = useState<Set<string>>(new Set())
-  const [maxDepth,    setMaxDepth]    = useState(DEFAULT_EXPAND_DEPTH)
-  const [zoomLevel,   setZoomLevel]   = useState(1)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  const [maxDepth, setMaxDepth] = useState(DEFAULT_MAX_DEPTH)
+  const [semanticMode, setSemanticMode] = useState<SemanticZoomMode>('compact')
   const [generations, setGenerations] = useState<{ depth: number; y: number; label: string }[]>([])
 
-  const toggleCollapse = useCallback((nodeId: string) => {
-    setCollapsed(prev => {
+  const toggleCollapse = useCallback((id: string) => {
+    setCollapsed((prev) => {
       const next = new Set(prev)
-      if (next.has(nodeId)) next.delete(nodeId)
-      else next.add(nodeId)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
       return next
     })
   }, [])
 
-  const filteredData = useMemo(() => {
-    return filterCollapsed(data, collapsed, 0, maxDepth)
-  }, [data, collapsed, maxDepth])
+  const filteredTree = useMemo(
+    () => filterByDepthAndCollapsed(data, collapsed, 0, maxDepth),
+    [data, collapsed, maxDepth]
+  )
+
+  // When tree data identity changes (e.g. switch to subtree), fit again on next draw
+  const dataIdRef = useRef(data?.id)
+  useEffect(() => {
+    if (data?.id !== dataIdRef.current) {
+      dataIdRef.current = data?.id
+      didInitialFit.current = false
+    }
+  }, [data])
 
   const draw = useCallback(() => {
-    if (!svgRef.current || !filteredData) return
-    const svg = d3.select(svgRef.current)
+    const svgEl = svgRef.current
+    if (!svgEl || !filteredTree) return
+
+    const svg = d3.select(svgEl)
     svg.selectAll('*').remove()
 
-    const W = svgRef.current.clientWidth  || 960
-    const H = svgRef.current.clientHeight || 640
+    const width = svgEl.clientWidth || 800
+    const height = svgEl.clientHeight || 500
 
-    // ── Defs ──────────────────────────────────────────────────────────────
+    // ── Defs ─────────────────────────────────────────────────────────────
     const defs = svg.append('defs')
-    const f1 = defs.append('filter').attr('id', 'card-shadow')
-      .attr('x', '-20%').attr('y', '-20%').attr('width', '140%').attr('height', '150%')
-    f1.append('feDropShadow').attr('dx', 0).attr('dy', 2).attr('stdDeviation', 4).attr('flood-color', 'rgba(0,0,0,0.10)')
-    const f2 = defs.append('filter').attr('id', 'card-shadow-sel')
-      .attr('x', '-20%').attr('y', '-20%').attr('width', '140%').attr('height', '150%')
-    f2.append('feDropShadow').attr('dx', 0).attr('dy', 3).attr('stdDeviation', 6).attr('flood-color', 'rgba(217,119,6,0.30)')
+    defs.append('filter').attr('id', 'tree-card-shadow').attr('x', '-30%').attr('y', '-30%').attr('width', '160%').attr('height', '160%')
+      .append('feDropShadow').attr('dx', 0).attr('dy', 2).attr('stdDeviation', 3).attr('flood-color', 'rgba(0,0,0,0.12)')
+    defs.append('filter').attr('id', 'tree-card-shadow-sel').attr('x', '-30%').attr('y', '-30%').attr('width', '160%').attr('height', '160%')
+      .append('feDropShadow').attr('dx', 0).attr('dy', 2).attr('stdDeviation', 4).attr('flood-color', 'rgba(217,119,6,0.25)')
 
-    // ── Hierarchy & layout ────────────────────────────────────────────────
-    const root = d3.hierarchy<ExtTreeNode>(filteredData as ExtTreeNode, d => d.children as ExtTreeNode[] | undefined)
-    d3.tree<ExtTreeNode>()
-      .nodeSize([NS_W, NS_H])
-      .separation((a, b) => a.parent === b.parent ? 1 : 1.2)(root)
+    // ── Hierarchy & layout (no mutation of nodes) ─────────────────────────
+    const root = d3.hierarchy(filteredTree, (d) => d.children)
+    d3.tree<TreeNode & { children?: TreeNode[] }>()
+      .nodeSize([NODE_DX, NODE_DY])
+      .separation((a, b) => (a.parent === b.parent ? 1 : 1.15))(root)
 
-    const allNodes = root.descendants()
-    // Stagger single-child chains: add horizontal offset by depth so they don't stack in one column
-    const depthBreadth = NS_W * 0.4
-    allNodes.forEach(n => {
-      ;(n as any).x = (n.x ?? 0) + n.depth * depthBreadth
-    })
-    // Standard vertical tree: x = breadth (siblings), y = depth (generations downward)
-    const xs = allNodes.map(n => n.x!)
-    const ys = allNodes.map(n => n.y!)
-    const treeW = (Math.max(...xs) - Math.min(...xs)) + NS_W
-    const treeH = (Math.max(...ys) - Math.min(...ys)) + NS_H
+    const nodes = root.descendants()
+    if (nodes.length === 0) return
 
-    // ── Root group ────────────────────────────────────────────────────────
+    const xs = nodes.map((n) => n.x!)
+    const ys = nodes.map((n) => n.y!)
+    const treeWidth = Math.max(...xs) - Math.min(...xs) + NODE_DX
+    const treeHeight = Math.max(...ys) - Math.min(...ys) + NODE_DY
+    const centerX = (Math.min(...xs) + Math.max(...xs)) / 2
+    const centerY = (Math.min(...ys) + Math.max(...ys)) / 2
+
     const g = svg.append('g')
-    gRef.current = g.node()
-
-    // ── Zoom ──────────────────────────────────────────────────────────────
     const zoom = d3.zoom<SVGSVGElement, unknown>()
-      .scaleExtent([0.02, 5])
-      .on('zoom', (e) => {
-        g.attr('transform', e.transform.toString())
-        transformRef.current = e.transform
-        const k = e.transform.k
-        if (Math.abs(k - zoomLevel) > 0.02) setZoomLevel(k)
+      .scaleExtent([0.05, 4])
+      .on('zoom', (ev) => {
+        transformRef.current = ev.transform
+        g.attr('transform', ev.transform.toString())
+        const mode = getSemanticMode(ev.transform.k)
+        if (lastSemanticModeRef.current !== mode) {
+          lastSemanticModeRef.current = mode
+          setSemanticMode(mode)
+        }
       })
-    zoomRef.current = zoom
+    zoomBehaviorRef.current = zoom
     svg.call(zoom)
 
-    if (!initialFitDone.current) {
-      const padX = 80, padY = 60
-      const scaleX = W / (treeW + padX * 2)
-      const scaleY = H / (treeH + padY * 2)
-      const scale = Math.min(scaleX, scaleY, 1.2)
-      const cx = (Math.min(...xs) + Math.max(...xs)) / 2
-      const cy = (Math.min(...ys) + Math.max(...ys)) / 2
-      const initT = d3.zoomIdentity
-        .translate(W / 2, H / 2)
+    if (!didInitialFit.current) {
+      const padding = 60
+      const scale = Math.min(
+        (width - padding * 2) / treeWidth,
+        (height - padding * 2) / treeHeight,
+        1.4
+      )
+      const t = d3.zoomIdentity
+        .translate(width / 2, height / 2)
         .scale(scale)
-        .translate(-cx, -cy)
-      svg.call(zoom.transform, initT)
-      transformRef.current = initT
-      initialFitDone.current = true
+        .translate(-centerX, -centerY)
+      svg.call(zoom.transform, t)
+      transformRef.current = t
+      didInitialFit.current = true
+      lastSemanticModeRef.current = getSemanticMode(t.k)
+      setSemanticMode(lastSemanticModeRef.current)
     } else {
       svg.call(zoom.transform, transformRef.current)
     }
 
-    // ── Generation info (depth = vertical y) ────────────────────────────────
-    const genMap = new Map<number, number>()
-    allNodes.forEach(n => {
-      if (!genMap.has(n.depth)) genMap.set(n.depth, n.y!)
-    })
-    const gens = Array.from(genMap.entries())
-      .sort((a, b) => a[0] - b[0])
-      .map(([depth, y]) => ({ depth, y, label: `الجيل ${depth + 1}` }))
-    setGenerations(gens)
+    // Generation strip data (by depth → y)
+    const genByDepth = new Map<number, number>()
+    nodes.forEach((n) => { if (!genByDepth.has(n.depth)) genByDepth.set(n.depth, n.y!) })
+    setGenerations(
+      Array.from(genByDepth.entries())
+        .sort((a, b) => a[0] - b[0])
+        .map(([depth, y]) => ({ depth, y, label: `الجيل ${depth + 1}` }))
+    )
 
-    type HNode = d3.HierarchyPointNode<ExtTreeNode>
+    type HNode = d3.HierarchyPointNode<TreeNode & { _collapsed?: boolean; _childCount?: number }>
 
-    // ── Connectors ────────────────────────────────────────────────────────
-    const connLayer = g.append('g').attr('class', 'conn-layer')
+    // ── Connectors (parent above, children below; one height for all zoom levels) ─
+    const linkGroup = g.append('g').attr('class', 'connectors').attr('aria-hidden', 'true')
     const byParent = new Map<HNode, HNode[]>()
     root.links().forEach(({ source, target }) => {
       const s = source as HNode
@@ -207,337 +231,235 @@ export function FamilyTreeCanvas({
       byParent.get(s)!.push(t)
     })
 
-    // Vertical tree: parent above, children below. Connectors: parent bottom → spine → each child top.
     byParent.forEach((children, parent) => {
-      const parentBottomY = parent.y + CH / 2 + 8
-      const childTopY = Math.min(...children.map(c => c.y)) - CH / 2 - 8
-      const midY = (parentBottomY + childTopY) / 2
-      const minChildX = Math.min(...children.map(c => c.x))
-      const maxChildX = Math.max(...children.map(c => c.x))
+      const py = parent.y + CONN_CARD_HALF + CONN_GAP
+      const cyMin = Math.min(...children.map((c) => c.y)) - CONN_CARD_HALF - CONN_GAP
+      const midY = (py + cyMin) / 2
+      const minX = Math.min(...children.map((c) => c.x))
+      const maxX = Math.max(...children.map((c) => c.x))
 
-      connLayer.append('line')
-        .attr('x1', parent.x).attr('y1', parent.y + CH / 2 + 8)
+      linkGroup.append('line')
+        .attr('x1', parent.x).attr('y1', parent.y + CONN_CARD_HALF + CONN_GAP)
         .attr('x2', parent.x).attr('y2', midY)
-        .attr('stroke', CONN).attr('stroke-width', C_W).attr('stroke-linecap', 'round')
-
-      connLayer.append('line')
-        .attr('x1', minChildX).attr('y1', midY)
-        .attr('x2', maxChildX).attr('y2', midY)
-        .attr('stroke', CONN).attr('stroke-width', C_W).attr('stroke-linecap', 'round')
-
-      children.forEach(child => {
-        connLayer.append('line')
+        .attr('stroke', CONN_COLOR).attr('stroke-width', CONN_WIDTH).attr('stroke-linecap', 'round')
+      linkGroup.append('line')
+        .attr('x1', minX).attr('y1', midY).attr('x2', maxX).attr('y2', midY)
+        .attr('stroke', CONN_COLOR).attr('stroke-width', CONN_WIDTH).attr('stroke-linecap', 'round')
+      children.forEach((child) => {
+        linkGroup.append('line')
           .attr('x1', child.x).attr('y1', midY)
-          .attr('x2', child.x).attr('y2', child.y - CH / 2 - 8)
-          .attr('stroke', CONN).attr('stroke-width', C_W).attr('stroke-linecap', 'round')
+          .attr('x2', child.x).attr('y2', child.y - CONN_CARD_HALF - CONN_GAP)
+          .attr('stroke', CONN_COLOR).attr('stroke-width', CONN_WIDTH).attr('stroke-linecap', 'round')
       })
     })
 
-    // ── Palette helper ────────────────────────────────────────────────────
-    function pal(p: ExtTreeNode) {
-      const m = p.gender === 'MALE'
-      const a = p.isAlive
+    // ── Helpers ─────────────────────────────────────────────────────────
+    function palette(p: TreeNode) {
+      const male = p.gender === 'MALE'
+      const alive = p.isAlive
       return {
-        bg:     a ? (m ? MALE_BG     : FEMALE_BG)     : DEAD_BG,
-        border: a ? (m ? MALE_BORDER : FEMALE_BORDER)  : DEAD_BORDER,
-        accent: a ? (m ? MALE_ACCENT : FEMALE_ACCENT)  : DEAD_ACCENT,
-        avBg:   a ? (m ? MALE_AV_BG  : FEMALE_AV_BG)  : DEAD_AV_BG,
-        text:   a ? (m ? MALE_TEXT   : FEMALE_TEXT)    : DEAD_TEXT,
+        bg: alive ? (male ? MALE_BG : FEMALE_BG) : DEAD_BG,
+        border: alive ? (male ? MALE_BORDER : FEMALE_BORDER) : DEAD_BORDER,
+        accent: alive ? (male ? MALE_ACCENT : FEMALE_ACCENT) : DEAD_ACCENT,
+        avBg: alive ? (male ? MALE_AV_BG : FEMALE_AV_BG) : DEAD_AV_BG,
+        text: alive ? (male ? MALE_TEXT : FEMALE_TEXT) : DEAD_TEXT,
       }
     }
-
-    function getName(p: ExtTreeNode) {
+    function displayName(p: TreeNode) {
       const raw = language === 'ar' ? (p.nameArabic || p.name) : p.name
-      return language === 'ar' ? tatweelName(raw || '', 1) : (raw || '')
+      return language === 'ar' ? tatweelName(raw ?? '', 1) : (raw ?? '')
     }
 
-    // ── Compact card (default) ────────────────────────────────────────────
-    function renderCompactCard(el: SVGGElement, person: ExtTreeNode, ox: number, isSel: boolean) {
-      const g = d3.select(el)
-      const c = pal(person)
-      const name = getName(person)
+    const mode = semanticMode
 
-      g.append('rect')
-        .attr('x', ox).attr('y', -CH / 2).attr('width', CW).attr('height', CH).attr('rx', CR)
-        .attr('fill', c.bg).attr('stroke', isSel ? '#d97706' : c.border)
-        .attr('stroke-width', isSel ? 2 : 1.2)
-        .attr('filter', isSel ? 'url(#card-shadow-sel)' : 'url(#card-shadow)')
-
-      g.append('rect')
-        .attr('x', ox).attr('y', -CH / 2).attr('width', 5).attr('height', CH)
-        .attr('rx', 2.5).attr('fill', c.accent)
-
-      const avCX = ox + 30
-      const avCY = 0
-      g.append('circle').attr('cx', avCX).attr('cy', avCY).attr('r', AVR)
-        .attr('fill', c.avBg).attr('stroke', c.border).attr('stroke-width', 1.2)
-
-      if (person.photo) {
-        const cid = `ac-${person.id}-${ox}`
-        g.append('defs').append('clipPath').attr('id', cid)
-          .append('circle').attr('cx', avCX).attr('cy', avCY).attr('r', AVR)
-        g.append('image').attr('href', person.photo)
-          .attr('x', avCX - AVR).attr('y', avCY - AVR)
-          .attr('width', AVR * 2).attr('height', AVR * 2)
-          .attr('clip-path', `url(#${cid})`).attr('preserveAspectRatio', 'xMidYMid slice')
-      } else {
-        g.append('text').attr('x', avCX).attr('y', avCY + 5)
-          .attr('text-anchor', 'middle').attr('font-size', 14).attr('font-weight', '700')
-          .attr('font-family', "'Cairo', sans-serif").attr('fill', c.accent)
-          .text((name || '؟').charAt(0))
-      }
-
-      const textX = ox + 56
-      g.append('text').attr('x', textX).attr('y', -6)
-        .attr('text-anchor', 'start').attr('font-size', 12.5).attr('font-weight', '700')
-        .attr('font-family', "'Cairo', 'Tajawal', sans-serif").attr('fill', c.text)
-        .text(clip(name || 'مجهول', 14))
-
-      const meta: string[] = []
-      if (person.tribe) meta.push(person.tribe)
-      if (person.birthYear) meta.push(`${person.birthYear}`)
-      if (!person.isAlive) meta.push('†')
-      if (meta.length) {
-        g.append('text').attr('x', textX).attr('y', 12)
-          .attr('text-anchor', 'start').attr('font-size', 10).attr('font-family', "'Cairo', sans-serif")
-          .attr('fill', '#64748b')
-          .text(clip(meta.join(' · '), 20))
-      }
-
-      const spouseCount = person.spouses?.length ?? 0
-      if (spouseCount > 0) {
-        const sp = person.spouses![0]
-        const spName = getName(sp)
-        g.append('text').attr('x', textX).attr('y', 26)
-          .attr('text-anchor', 'start').attr('font-size', 9).attr('font-family', "'Cairo', sans-serif")
-          .attr('fill', '#92400e')
-          .text(`♥ ${clip(spName, 12)}${spouseCount > 1 ? ` (+${spouseCount - 1})` : ''}`)
-      }
-    }
-
-    // ── Expanded card (zoomed in) ─────────────────────────────────────────
-    function renderExpandedCard(el: SVGGElement, person: ExtTreeNode, ox: number, isSel: boolean) {
-      const g = d3.select(el)
-      const c = pal(person)
-      const name = getName(person)
-      const w = EX_CW
-      const h = EX_CH
-
-      g.append('rect').attr('x', ox).attr('y', -h / 2).attr('width', w).attr('height', h).attr('rx', CR)
-        .attr('fill', c.bg).attr('stroke', isSel ? '#d97706' : c.border)
-        .attr('stroke-width', isSel ? 2.5 : 1.5)
-        .attr('filter', isSel ? 'url(#card-shadow-sel)' : 'url(#card-shadow)')
-
-      g.append('rect').attr('x', ox).attr('y', -h / 2).attr('width', w).attr('height', 6).attr('rx', CR)
-        .attr('fill', c.accent)
-
-      const avCX = ox + w / 2
-      const avCY = -h / 2 + 18 + EX_AVR
-      g.append('circle').attr('cx', avCX).attr('cy', avCY).attr('r', EX_AVR + 2)
-        .attr('fill', 'white').attr('stroke', c.border).attr('stroke-width', 1.5)
-      g.append('circle').attr('cx', avCX).attr('cy', avCY).attr('r', EX_AVR).attr('fill', c.avBg)
-
-      if (person.photo) {
-        const cid = `ae-${person.id}-${ox}`
-        g.append('defs').append('clipPath').attr('id', cid)
-          .append('circle').attr('cx', avCX).attr('cy', avCY).attr('r', EX_AVR)
-        g.append('image').attr('href', person.photo)
-          .attr('x', avCX - EX_AVR).attr('y', avCY - EX_AVR)
-          .attr('width', EX_AVR * 2).attr('height', EX_AVR * 2)
-          .attr('clip-path', `url(#${cid})`).attr('preserveAspectRatio', 'xMidYMid slice')
-      } else {
-        g.append('text').attr('x', avCX).attr('y', avCY + 6)
-          .attr('text-anchor', 'middle').attr('font-size', 18).attr('font-weight', '700')
-          .attr('font-family', "'Cairo', sans-serif").attr('fill', c.accent)
-          .text((name || '؟').charAt(0))
-      }
-
-      const nameY = avCY + EX_AVR + 16
-      g.append('text').attr('x', avCX).attr('y', nameY)
-        .attr('text-anchor', 'middle').attr('font-size', 13).attr('font-weight', '700')
-        .attr('font-family', "'Cairo', 'Tajawal', sans-serif").attr('fill', c.text)
-        .text(clip(name || 'مجهول', 16))
-
-      const meta: string[] = []
-      if (person.tribe) meta.push(person.tribe)
-      if (person.birthYear) meta.push(`${person.birthYear}${person.deathYear ? ` – ${person.deathYear}` : ''}`)
-      if (!person.isAlive && !person.deathYear) meta.push('†')
-      if (meta.length) {
-        g.append('text').attr('x', avCX).attr('y', nameY + 16)
-          .attr('text-anchor', 'middle').attr('font-size', 10).attr('font-family', "'Cairo', sans-serif")
-          .attr('fill', '#64748b')
-          .text(clip(meta.join(' · '), 24))
-      }
-
-      const spouseCount = person.spouses?.length ?? 0
-      if (spouseCount > 0) {
-        const spName = getName(person.spouses![0])
-        g.append('text').attr('x', avCX).attr('y', nameY + 30)
-          .attr('text-anchor', 'middle').attr('font-size', 9.5).attr('font-family', "'Cairo', sans-serif")
-          .attr('fill', '#92400e')
-          .text(`♥ ${clip(spName, 14)}${spouseCount > 1 ? ` (+${spouseCount - 1})` : ''}`)
-      }
-    }
-
-    // ── Dot/pill mode (far zoom) ──────────────────────────────────────────
-    function renderDot(el: SVGGElement, person: ExtTreeNode) {
-      const g = d3.select(el)
-      const c = pal(person)
-      g.append('circle').attr('cx', 0).attr('cy', 0).attr('r', 8)
-        .attr('fill', c.accent).attr('stroke', 'white').attr('stroke-width', 1.5)
-    }
-
-    // ── Node groups (vertical tree: x = breadth, y = depth) ─────────────────
-    const nodeGs = g.append('g').attr('class', 'nodes-layer')
-      .selectAll<SVGGElement, HNode>('.node')
-      .data(allNodes)
-      .enter().append('g')
+    // ── Nodes ──────────────────────────────────────────────────────────
+    const nodeGroup = g.append('g').attr('class', 'nodes')
+    const nodeEls = nodeGroup
+      .selectAll<SVGGElement, HNode>('g.node')
+      .data(nodes)
+      .join('g')
       .attr('class', 'node')
-      .attr('transform', d => `translate(${d.x},${d.y})`)
+      .attr('transform', (d) => `translate(${d.x},${d.y})`)
       .style('cursor', 'pointer')
 
-    nodeGs.each(function(d) {
-      const person = d.data
-      const isSel = person.id === selectedId
-      const z = transformRef.current.k
+    nodeEls.each(function (d) {
+      const p = d.data
+      const ext = p as TreeNode & { _collapsed?: boolean; _childCount?: number }
+      const isSelected = p.id === selectedId
+      const col = palette(p)
+      const name = displayName(p)
 
-      if (z < ZOOM_COMPACT) {
-        renderDot(this, person)
-      } else if (z >= ZOOM_EXPANDED) {
-        renderExpandedCard(this, person, -EX_CW / 2, isSel)
-      } else {
-        renderCompactCard(this, person, -CW / 2, isSel)
+      if (mode === 'dot') {
+        d3.select(this)
+          .append('circle').attr('r', 10).attr('fill', col.accent).attr('stroke', '#fff').attr('stroke-width', 2)
+        return
       }
 
-      // ── Collapse/expand toggle ────────────────────────────────────────
-      const node = person as ExtTreeNode
-      const hasKids = (node._collapsed && (node._childCount ?? 0) > 0) || (node.children && node.children.length > 0)
-      if (hasKids) {
-        const cardH = z >= ZOOM_EXPANDED ? EX_CH : CH
-        const btnY = cardH / 2 + 4
-        const badge = d3.select(this).append('g')
-          .attr('transform', `translate(0,${btnY})`)
-          .style('cursor', 'pointer')
-          .on('click', (ev) => {
-            ev.stopPropagation()
-            toggleCollapse(person.id)
-          })
+      const isExpanded = mode === 'expanded'
+      const w = isExpanded ? EX_CARD_W : CARD_W
+      const h = isExpanded ? EX_CARD_H : CARD_H
+      const ox = -w / 2
 
-        if (node._collapsed) {
-          badge.append('rect')
-            .attr('x', -24).attr('y', -10).attr('width', 48).attr('height', 20).attr('rx', 10)
-            .attr('fill', '#d4922d').attr('stroke', 'white').attr('stroke-width', 1.5)
-          badge.append('text')
-            .attr('x', 0).attr('y', 5).attr('text-anchor', 'middle')
-            .attr('font-size', 10).attr('font-weight', '700').attr('fill', 'white')
-            .attr('font-family', "'Cairo', sans-serif")
-            .text(`▼ ${node._childCount ?? ''}`)
+      d3.select(this)
+        .append('rect')
+        .attr('x', ox).attr('y', -h / 2).attr('width', w).attr('height', h).attr('rx', CARD_R)
+        .attr('fill', col.bg).attr('stroke', isSelected ? '#d97706' : col.border)
+        .attr('stroke-width', isSelected ? 2.5 : 1.2)
+        .attr('filter', isSelected ? 'url(#tree-card-shadow-sel)' : 'url(#tree-card-shadow)')
+      d3.select(this)
+        .append('rect')
+        .attr('x', ox).attr('y', -h / 2).attr('width', 5).attr('height', h).attr('rx', 2.5)
+        .attr('fill', col.accent)
+
+      const avCx = ox + (isExpanded ? w / 2 : 32)
+      const avCy = isExpanded ? -h / 2 + 20 + EX_AVATAR_R : 0
+      const avR = isExpanded ? EX_AVATAR_R : AVATAR_R
+
+      d3.select(this)
+        .append('circle').attr('cx', avCx).attr('cy', avCy).attr('r', avR)
+        .attr('fill', col.avBg).attr('stroke', col.border).attr('stroke-width', 1.2)
+
+      if (p.photo) {
+        const clipId = `av-${p.id}-${d.x}-${d.y}`
+        d3.select(this).append('defs').append('clipPath').attr('id', clipId)
+          .append('circle').attr('cx', avCx).attr('cy', avCy).attr('r', avR)
+        d3.select(this)
+          .append('image').attr('href', p.photo)
+          .attr('x', avCx - avR).attr('y', avCy - avR).attr('width', avR * 2).attr('height', avR * 2)
+          .attr('clip-path', `url(#${clipId})`).attr('preserveAspectRatio', 'xMidYMid slice')
+      } else {
+        d3.select(this)
+          .append('text').attr('x', avCx).attr('y', avCy + (isExpanded ? 6 : 5))
+          .attr('text-anchor', 'middle').attr('font-size', isExpanded ? 18 : 14).attr('font-weight', '700')
+          .attr('font-family', "'Cairo', sans-serif").attr('fill', col.accent)
+          .text((name || '؟').charAt(0))
+      }
+
+      const textX = ox + (isExpanded ? w / 2 : 56)
+      const nameY = isExpanded ? avCy + avR + 14 : -6
+      d3.select(this)
+        .append('text').attr('x', textX).attr('y', nameY)
+        .attr('text-anchor', isExpanded ? 'middle' : 'start').attr('font-size', isExpanded ? 13 : 12.5).attr('font-weight', '700')
+        .attr('font-family', "'Cairo', 'Tajawal', sans-serif").attr('fill', col.text)
+        .text(clipText(name || '—', isExpanded ? 18 : 14))
+
+      const meta: string[] = []
+      if (p.tribe) meta.push(p.tribe)
+      if (p.birthYear) meta.push(String(p.birthYear))
+      if (!p.isAlive) meta.push('†')
+      if (meta.length) {
+        d3.select(this)
+          .append('text').attr('x', textX).attr('y', nameY + (isExpanded ? 16 : 16))
+          .attr('text-anchor', isExpanded ? 'middle' : 'start').attr('font-size', 10)
+          .attr('font-family', "'Cairo', sans-serif").attr('fill', '#64748b')
+          .text(clipText(meta.join(' · '), 22))
+      }
+
+      const spouseCount = p.spouses?.length ?? 0
+      if (spouseCount > 0) {
+        const spName = displayName(p.spouses![0])
+        d3.select(this)
+          .append('text').attr('x', textX).attr('y', nameY + (isExpanded ? 32 : 28))
+          .attr('text-anchor', isExpanded ? 'middle' : 'start').attr('font-size', 9)
+          .attr('font-family', "'Cairo', sans-serif").attr('fill', '#92400e')
+          .text('♥ ' + clipText(spName, 12) + (spouseCount > 1 ? ` +${spouseCount - 1}` : ''))
+      }
+
+      const hasChildren = (ext._collapsed && (ext._childCount ?? 0) > 0) || (ext.children && ext.children.length > 0)
+      if (hasChildren) {
+        const btnY = h / 2 + 6
+        const badge = d3.select(this).append('g').attr('transform', `translate(0,${btnY})`).style('cursor', 'pointer')
+          .on('click', (ev) => { ev.stopPropagation(); toggleCollapse(p.id) })
+        if (ext._collapsed) {
+          badge.append('rect').attr('x', -28).attr('y', -10).attr('width', 56).attr('height', 20).attr('rx', 10)
+            .attr('fill', '#d4922d').attr('stroke', '#fff').attr('stroke-width', 1.5)
+          badge.append('text').attr('x', 0).attr('y', 5).attr('text-anchor', 'middle')
+            .attr('font-size', 10).attr('font-weight', '700').attr('fill', '#fff').attr('font-family', "'Cairo', sans-serif")
+            .text(`▼ ${ext._childCount ?? ''}`)
         } else {
-          badge.append('circle')
-            .attr('r', 10).attr('fill', '#e2e8f0').attr('stroke', '#94a3b8').attr('stroke-width', 1)
-          badge.append('text')
-            .attr('x', 0).attr('y', 4).attr('text-anchor', 'middle')
-            .attr('font-size', 11).attr('font-weight', '700').attr('fill', '#475569')
-            .text('▲')
+          badge.append('circle').attr('r', 9).attr('fill', '#e2e8f0').attr('stroke', '#94a3b8').attr('stroke-width', 1)
+          badge.append('text').attr('x', 0).attr('y', 4).attr('text-anchor', 'middle')
+            .attr('font-size', 10).attr('font-weight', '700').attr('fill', '#475569').text('▲')
         }
       }
 
-      // ── Add button ────────────────────────────────────────────────────
-      if (!readOnly && !node._collapsed) {
-        const cardH = z >= ZOOM_EXPANDED ? EX_CH : CH
-        const addBtnY = cardH / 2 + (hasKids ? 28 : 8)
-        const addBtn = d3.select(this).append('g')
-          .attr('class', 'add-btn')
-          .attr('transform', `translate(0,${addBtnY})`)
+      if (!readOnly && !ext._collapsed) {
+        const addY = h / 2 + (hasChildren ? 32 : 10)
+        const addBtn = d3.select(this).append('g').attr('class', 'add-btn').attr('transform', `translate(0,${addY})`)
           .style('opacity', 0).style('cursor', 'pointer')
-          .on('click', (ev) => { ev.stopPropagation(); onNodeAdd?.(person) })
-
-        addBtn.append('circle').attr('r', 12)
-          .attr('fill', '#d4922d').attr('stroke', 'white').attr('stroke-width', 2)
-        addBtn.append('text').attr('text-anchor', 'middle').attr('y', 5)
-          .attr('font-size', 16).attr('font-weight', '700').attr('fill', 'white').text('+')
+          .on('click', (ev) => { ev.stopPropagation(); onNodeAdd?.(p) })
+        addBtn.append('circle').attr('r', 12).attr('fill', '#d4922d').attr('stroke', '#fff').attr('stroke-width', 2)
+        addBtn.append('text').attr('text-anchor', 'middle').attr('y', 5).attr('font-size', 16).attr('font-weight', '700').attr('fill', '#fff').text('+')
       }
     })
 
-    // ── Hover / click ─────────────────────────────────────────────────────
-    nodeGs
-      .on('mouseenter', function() {
-        d3.select(this).select('.add-btn').transition().duration(150).style('opacity', 1)
-      })
-      .on('mouseleave', function() {
-        d3.select(this).select('.add-btn').transition().duration(150).style('opacity', 0)
-      })
-      .on('click', (ev, d) => {
-        ev.stopPropagation()
-        setSelectedId(d.data.id)
-        onNodeClick?.(d.data)
-      })
-      .on('dblclick', (ev, d) => {
-        ev.stopPropagation()
-        onViewSubtree?.(d.data)
-      })
+    nodeEls
+      .on('mouseenter', function () { d3.select(this).select('.add-btn').transition().duration(120).style('opacity', 1) })
+      .on('mouseleave', function () { d3.select(this).select('.add-btn').transition().duration(120).style('opacity', 0) })
+      .on('click', (ev, d) => { ev.stopPropagation(); setSelectedId(d.data.id); onNodeClick?.(d.data) })
+      .on('dblclick', (ev, d) => { ev.stopPropagation(); onViewSubtree?.(d.data) })
 
-    svg.on('click', () => { setSelectedId(null) })
-  }, [filteredData, selectedId, language, readOnly, onNodeClick, onNodeAdd, onViewSubtree, toggleCollapse, zoomLevel])
+    svg.on('click', () => setSelectedId(null))
+  }, [filteredTree, selectedId, semanticMode, language, readOnly, onNodeClick, onNodeAdd, onViewSubtree, toggleCollapse])
 
   useEffect(() => { draw() }, [draw])
 
   useEffect(() => {
-    if (!containerRef.current) return
+    const el = containerRef.current
+    if (!el) return
     const ro = new ResizeObserver(() => draw())
-    ro.observe(containerRef.current)
+    ro.observe(el)
     return () => ro.disconnect()
   }, [draw])
 
-  function zoomBy(k: number) {
-    if (!svgRef.current || !zoomRef.current) return
-    d3.select(svgRef.current).transition().duration(220).call(zoomRef.current.scaleBy, k)
-  }
-  function fitView() {
-    initialFitDone.current = false
-    draw()
-  }
+  const zoomBy = useCallback((k: number) => {
+    if (!svgRef.current || !zoomBehaviorRef.current) return
+    d3.select(svgRef.current).transition().duration(200).call(zoomBehaviorRef.current.scaleBy, k)
+  }, [])
 
-  function expandAll() {
+  const fitView = useCallback(() => {
+    didInitialFit.current = false
+    draw()
+  }, [draw])
+
+  const expandAll = useCallback(() => {
     setCollapsed(new Set())
-    setMaxDepth(MAX_DEPTH_EXPAND_ALL)
-  }
-  function collapseAll() {
+    setMaxDepth(MAX_DEPTH_LIMIT)
+  }, [])
+
+  const collapseAll = useCallback(() => {
     const ids = new Set<string>()
     function walk(n: TreeNode, depth: number) {
-      if (depth >= 2 && n.children?.length) ids.add(n.id)
-      n.children?.forEach(c => walk(c, depth + 1))
+      if (depth >= 1 && n.children?.length) ids.add(n.id)
+      n.children?.forEach((c) => walk(c, depth + 1))
     }
     walk(data, 0)
     setCollapsed(ids)
-    setMaxDepth(DEFAULT_EXPAND_DEPTH)
-  }
-  function showMoreGenerations() {
-    setMaxDepth((d) => Math.min(d + 5, MAX_DEPTH_EXPAND_ALL))
-  }
+    setMaxDepth(DEFAULT_MAX_DEPTH)
+  }, [data])
+
+  const showMoreLevels = useCallback(() => {
+    setMaxDepth((d) => Math.min(d + 5, MAX_DEPTH_LIMIT))
+  }, [])
 
   return (
-    <div ref={containerRef} className="relative w-full h-full overflow-hidden select-none tree-canvas-bg">
-      <svg ref={svgRef} className="w-full h-full" style={{ minHeight: 500 }} />
+    <div ref={containerRef} className="relative w-full h-full overflow-hidden select-none bg-sand-50/80">
+      <svg ref={svgRef} className="w-full h-full block" style={{ minHeight: 400 }} aria-label="شجرة العائلة" />
 
-      {/* ── Generation navigator (right strip) ──────────────────────────── */}
       {generations.length > 1 && (
-        <div
-          className="absolute top-1/2 right-2 -translate-y-1/2 flex flex-col gap-1 z-20"
-          dir="rtl"
-        >
+        <div className="absolute top-1/2 right-2 -translate-y-1/2 flex flex-col gap-1 z-20" dir="rtl">
           {generations.map((gen) => (
             <button
               key={gen.depth}
               type="button"
               onClick={() => {
-                if (!svgRef.current || !zoomRef.current) return
+                if (!svgRef.current || !zoomBehaviorRef.current) return
                 const t = transformRef.current
-                const newY = -(gen.y * t.k) + (svgRef.current.clientHeight / 2)
-                const newT = d3.zoomIdentity.translate(t.x, newY).scale(t.k)
-                d3.select(svgRef.current).transition().duration(400).call(zoomRef.current.transform, newT)
+                const newTy = -(gen.y * t.k) + (svgRef.current.clientHeight / 2)
+                const newT = d3.zoomIdentity.translate(t.x, newTy).scale(t.k)
+                d3.select(svgRef.current).transition().duration(350).call(zoomBehaviorRef.current.transform, newT)
               }}
-              className="w-7 h-7 rounded-lg bg-white/90 border border-sand-200 shadow-sm flex items-center justify-center text-[10px] font-bold text-khartoum-600 hover:bg-sand-100 transition-colors"
+              className="w-8 h-8 rounded-lg bg-white/95 border border-sand-200 shadow-sm flex items-center justify-center text-xs font-bold text-khartoum-600 hover:bg-sand-100"
               title={gen.label}
             >
               {gen.depth + 1}
@@ -546,62 +468,59 @@ export function FamilyTreeCanvas({
         </div>
       )}
 
-      {/* ── Zoom controls ──────────────────────────────────────────────── */}
-      <div className="absolute bottom-5 right-5 flex flex-col gap-1.5 z-20" dir="ltr">
-        {([
-          { label: '+', fn: () => zoomBy(1.4),  title: 'تكبير' },
-          { label: '−', fn: () => zoomBy(0.7),  title: 'تصغير' },
-          { label: '⌂', fn: fitView,            title: 'ملائمة' },
-        ] as const).map(b => (
-          <button key={b.label} onClick={b.fn} title={b.title}
-            className="w-9 h-9 rounded-xl bg-white/95 backdrop-blur-sm border border-sand-200 shadow-md flex items-center justify-center text-khartoum-600 hover:bg-white hover:shadow-lg font-bold text-sm transition-all">
+      <div className="absolute bottom-4 right-4 flex flex-col gap-2 z-20" dir="ltr">
+        {[
+          { label: '+', fn: () => zoomBy(1.3), title: 'تكبير' },
+          { label: '−', fn: () => zoomBy(1 / 1.3), title: 'تصغير' },
+          { label: '⌂', fn: fitView, title: 'ملائمة الشجرة' },
+        ].map((b) => (
+          <button
+            key={b.label}
+            type="button"
+            onClick={b.fn}
+            title={b.title}
+            className="w-10 h-10 rounded-xl bg-white/95 border border-sand-200 shadow-md flex items-center justify-center text-khartoum-600 hover:bg-white font-bold text-sm"
+          >
             {b.label}
           </button>
         ))}
       </div>
 
-      {/* ── Expand/Collapse all + Show more generations ──────────────────── */}
-      <div className="absolute top-3 right-3 flex flex-wrap items-center gap-1.5 z-20" dir="rtl">
-        <button onClick={expandAll} title="توسيع الشجرة وعرض كل الأجيال (حتى 25 مستوى)"
-          className="px-2.5 py-1 rounded-lg bg-white/90 border border-sand-200 shadow-sm text-[10px] font-semibold text-khartoum-600 hover:bg-sand-100 transition-colors">
-          توسيع الكل ▼
+      <div className="absolute top-3 right-3 flex flex-wrap gap-2 z-20" dir="rtl">
+        <button
+          type="button"
+          onClick={expandAll}
+          title="عرض كل المستويات حتى 30"
+          className="px-3 py-1.5 rounded-lg bg-white/95 border border-sand-200 shadow-sm text-xs font-semibold text-khartoum-600 hover:bg-sand-100"
+        >
+          توسيع الكل
         </button>
-        <button onClick={showMoreGenerations} title="عرض 5 أجيال إضافية"
-          className="px-2.5 py-1 rounded-lg bg-nile-100 border border-nile-200 shadow-sm text-[10px] font-semibold text-nile-700 hover:bg-nile-200 transition-colors">
-          أجيال أكثر +
+        <button
+          type="button"
+          onClick={showMoreLevels}
+          title="إضافة 5 مستويات"
+          className="px-3 py-1.5 rounded-lg bg-nile-100 border border-nile-200 text-xs font-semibold text-nile-700 hover:bg-nile-200"
+        >
+          أجيال +
         </button>
-        <button onClick={collapseAll} title="طي الفروع وإعادة العمق الافتراضي"
-          className="px-2.5 py-1 rounded-lg bg-white/90 border border-sand-200 shadow-sm text-[10px] font-semibold text-khartoum-600 hover:bg-sand-100 transition-colors">
-          طي ▲
+        <button
+          type="button"
+          onClick={collapseAll}
+          title="طي الفروع"
+          className="px-3 py-1.5 rounded-lg bg-white/95 border border-sand-200 shadow-sm text-xs font-semibold text-khartoum-600 hover:bg-sand-100"
+        >
+          طي
         </button>
       </div>
 
-      {/* ── Legend ─────────────────────────────────────────────────────── */}
-      <div className="absolute bottom-5 left-3 bg-white/90 backdrop-blur-sm rounded-xl px-2.5 py-2 border border-sand-100 shadow-sm space-y-1 z-20" dir="rtl">
-        {([
-          { color: MALE_ACCENT,   label: 'ذكر'   },
-          { color: FEMALE_ACCENT, label: 'أنثى'  },
-          { color: DEAD_ACCENT,   label: 'متوفى' },
-        ]).map(({ color, label }) => (
-          <div key={label} className="flex items-center gap-1.5">
-            <div className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
-            <span className="text-[10px] text-khartoum-600 font-medium">{label}</span>
-          </div>
-        ))}
-        <div className="text-[9px] text-khartoum-400 pt-1 border-t border-sand-100">
-          نقر مزدوج = عرض الفرع
+      <div className="absolute bottom-4 left-3 bg-white/95 rounded-xl px-3 py-2 border border-sand-100 shadow-sm z-20" dir="rtl">
+        <div className="flex flex-wrap gap-x-3 gap-y-1">
+          <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-blue-500" /> ذكر</span>
+          <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-pink-500" /> أنثى</span>
+          <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-slate-400" /> متوفى</span>
         </div>
-      </div>
-
-      {/* ── Zoom level indicator ───────────────────────────────────────── */}
-      <div className="absolute top-3 left-3 bg-white/80 rounded-lg px-2 py-1 border border-sand-100 text-[10px] text-khartoum-500 font-mono z-10">
-        {Math.round(zoomLevel * 100)}%
+        <p className="text-[10px] text-khartoum-400 mt-1.5 pt-1.5 border-t border-sand-100">نقر مزدوج = عرض الفرع</p>
       </div>
     </div>
   )
-}
-
-function clip(s: string, max: number): string {
-  const m = Math.max(3, Math.floor(max))
-  return s.length > m ? s.slice(0, m - 1) + '…' : s
 }
