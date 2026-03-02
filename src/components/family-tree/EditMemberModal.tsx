@@ -15,7 +15,7 @@ const editSchema = z.object({
   fullNameArabic: z.string().optional().or(z.literal('')),
   fatherName:     z.string().optional().or(z.literal('')),
   grandfatherName: z.string().optional().or(z.literal('')),
-  gender:         z.enum(['MALE', 'FEMALE', 'UNSPECIFIED']),
+  gender:         z.enum(['MALE', 'FEMALE']),
   isAlive:        z.boolean(),
   birthYear:      z.preprocess(
     v => (v === '' || v === null || v === undefined || (typeof v === 'number' && Number.isNaN(v)) ? undefined : v),
@@ -178,9 +178,8 @@ export function EditMemberModal({ member, onSuccess, onClose }: EditMemberModalP
               <label className="label">الجنس</label>
               <div className="flex gap-3">
                 {[
-                  { value: 'MALE', label: 'ذكر', color: 'nile' },
+                  { value: 'MALE',   label: 'ذكر',  color: 'nile' },
                   { value: 'FEMALE', label: 'أنثى', color: 'sahara' },
-                  { value: 'UNSPECIFIED', label: 'غير محدد', color: 'khartoum' },
                 ].map(g => (
                   <label
                     key={g.value}

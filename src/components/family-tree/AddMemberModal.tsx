@@ -17,7 +17,7 @@ const memberSchema = z.object({
   fullNameArabic:   z.string().optional().or(z.literal('')),
   fatherName:       z.string().optional().or(z.literal('')),
   grandfatherName:  z.string().optional().or(z.literal('')),
-  gender:           z.enum(['MALE', 'FEMALE', 'UNSPECIFIED']),
+  gender:           z.enum(['MALE', 'FEMALE']),
   isAlive:          z.boolean().default(true),
   birthYear:        z.preprocess(v => (typeof v === 'number' && isNaN(v)) ? null : v, z.number().int().min(1600).max(new Date().getFullYear()).optional().nullable()),
   deathYear:        z.preprocess(v => (typeof v === 'number' && isNaN(v)) ? null : v, z.number().int().min(1600).max(new Date().getFullYear()).optional().nullable()),
@@ -283,7 +283,7 @@ export function AddMemberModal({ treeId, relativeOf, addParentHint, onSuccess, o
               <label className="label">الجنس *</label>
               <div className="flex gap-3">
                 {[
-                  { value: 'MALE',   label: 'ذكر',  color: 'nile' },
+                  { value: 'MALE',   label: 'ذكر',  color: 'nile'   },
                   { value: 'FEMALE', label: 'أنثى', color: 'sahara' },
                 ].map(g => (
                   <label
@@ -293,7 +293,9 @@ export function AddMemberModal({ treeId, relativeOf, addParentHint, onSuccess, o
                       watch('gender') === g.value
                         ? g.color === 'nile'
                           ? 'border-nile-400 bg-nile-50 text-nile-700'
-                          : 'border-sahara-400 bg-sahara-50 text-sahara-700'
+                          : g.color === 'sahara'
+                          ? 'border-sahara-400 bg-sahara-50 text-sahara-700'
+                          : 'border-khartoum-400 bg-khartoum-50 text-khartoum-700'
                         : 'border-khartoum-200 hover:border-khartoum-300'
                     )}
                   >

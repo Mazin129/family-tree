@@ -3,12 +3,12 @@
 // Family tree graph data lives in Neo4j
 
 generator client {
-  provider = "prisma-client-js"
+  provider   = "prisma-client-js"
+  engineType = "binary"
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 // ─────────────────────────────────────────────
@@ -456,6 +456,7 @@ enum Language {
 enum Gender {
   MALE
   FEMALE
+  UNSPECIFIED
 }
 
 enum Region {

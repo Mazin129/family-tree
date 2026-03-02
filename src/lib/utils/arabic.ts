@@ -325,7 +325,6 @@ export const RELATIONSHIP_LABELS_EN: Record<string, string> = {
 }
 
 export const GENDER_LABELS = {
-  MALE:        { ar: 'ذكر',    en: 'Male'        },
-  FEMALE:      { ar: 'أنثى',   en: 'Female'      },
-  UNSPECIFIED: { ar: 'غير محدد', en: 'Unspecified' },
+  MALE:   { ar: 'ذكر',  en: 'Male'   },
+  FEMALE: { ar: 'أنثى', en: 'Female' },
 }
