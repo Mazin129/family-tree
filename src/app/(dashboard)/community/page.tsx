@@ -215,7 +215,7 @@ export default async function CommunityPage({
             <h3 className="font-semibold mb-4">إحصائيات المجتمع</h3>
             <div className="space-y-3">
               {[
-                { label: 'منشور منشور', value: total    },
+                { label: 'منشورات', value: total },
                 { label: 'قبيلة موثقة', value: 50       },
                 { label: 'إقليم مغطى', value: 18        },
               ].map(s => (

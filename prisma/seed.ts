@@ -1,7 +1,12 @@
 import { PrismaClient, UserRole, Language, Gender, Region, PrivacyLevel, PostCategory } from '@prisma/client'
+import { PrismaPg } from '@prisma/adapter-pg'
 import bcrypt from 'bcryptjs'
 
-const prisma = new PrismaClient()
+const adapter = new PrismaPg({
+  connectionString: process.env.DATABASE_URL!,
+})
+
+const prisma = new PrismaClient({ adapter })
 
 async function main() {
   console.log('🌱 Seeding database...')
@@ -85,50 +90,85 @@ async function main() {
     }
   })
 
-  // Seed community posts
+  // Seed community posts (Wikipedia & heritage-based content)
   const posts = [
     {
       authorId: admin.id,
       title: 'Welcome to the Sudanese Heritage Platform',
       titleArabic: 'مرحباً بكم في منصة التراث السوداني',
-      content: 'We are thrilled to launch this platform dedicated to preserving and celebrating Sudanese cultural heritage.',
-      contentAr: 'يسعدنا إطلاق هذه المنصة المكرسة للحفاظ على التراث الثقافي السوداني والاحتفاء به.',
+      content: 'We are thrilled to launch this platform dedicated to preserving and celebrating Sudanese cultural heritage...',
+      contentAr: 'يسعدنا إطلاق هذه المنصة المكرسة للحفاظ على التراث الثقافي السوداني والاحتفاء به...',
       category: PostCategory.GENERAL,
       isPinned: true,
       tags: ['welcome', 'heritage', 'platform'],
     },
     {
       authorId: admin.id,
-      title: 'Sudan Through the Ages: From Kush to Independence',
-      titleArabic: 'السودان عبر العصور: من مملكة كوش إلى الاستقلال',
-      content:
-        'Sudan is home to some of the world\'s oldest civilizations. The Kingdom of Kush, centered at Napata and later Meroë, flourished along the Nile and built steep pyramids, temples, and royal cities that rivaled ancient Egypt. After the fall of Kush, Christian Nubian kingdoms such as Nobatia, Makuria, and Alodia dominated the region before gradually giving way to Islamic sultanates and, later, Ottoman-Egyptian and Anglo-Egyptian rule. Modern Sudan gained independence in 1956, inheriting a rich and diverse historical legacy.',
-      contentAr:
-        'يُعد السودان من أقدم مناطق العالم المأهولة، حيث ازدهرت على ضفاف النيل حضارات مبكرة أبرزها مملكة كوش التي اتخذت من نبتة ثم مروي عاصمة لها، وشيدت أهرامات ومعابد ومدناً ملكية لا تزال آثارها قائمة حتى اليوم. أعقبتها الممالك النوبية المسيحية مثل نوباتيا والمقرة وعلوة، ثم ظهرت السلطنات الإسلامية كسلطنة سنار في الشرق وممالك دارفور في الغرب، قبل أن يخضع السودان للحكم التركي المصري ثم الثنائي الإنجليزي المصري. نال السودان استقلاله عام 1956 حاملاً إرثاً تاريخياً متنوعاً يعكس تلاقي حضارات إفريقيا ووادي النيل.',
+      title: 'Kingdom of Kush and Ancient Meroë',
+      titleArabic: 'مملكة كوش ومدينة مروي القديمة',
+      content: `The Kingdom of Kush was an ancient kingdom in Nubia centered along the Nile Valley in what is now northern Sudan and southern Egypt. It existed from approximately the 8th century BCE until around 350 CE, representing one of the earliest and most advanced states on the African continent.
+
+The city-state of Kerma emerged as the dominant political force between 2450 and 1450 BCE. In the 8th century BCE, King Piye invaded Lower Egypt, establishing the Kushite-ruled Twenty-fifth Dynasty. Kushite monarchs ruled Egypt for over a century.
+
+After the capital moved to Meroë (around 591 BCE), the city became the heart of the kingdom. Meroë is marked by more than 200 pyramids in three groups, with distinctive Nubian proportions. The Pyramids of Meroë date to the 3rd century BCE–4th century CE and served as burial places for Kushite monarchs and royal family members.
+
+Sources: Wikipedia – Kingdom of Kush, Meroë, Pyramids of Meroë`,
+      contentAr: `مملكة كوش مملكة قديمة في النوبة، تركزت على طول وادي النيل في ما يعرف الآن بشمال السودان وجنوب مصر. وُجدت من القرن الثامن قبل الميلاد حتى حوالي 350 ميلادية، وتمثل إحدى أقدم وأكثر الدول تقدماً في القارة الإفريقية.
+
+ظهرت مدينة كرمة كقوة سياسية مهيمنة بين 2450 و1450 قبل الميلاد. في القرن الثامن قبل الميلاد، غزا الملك بعانخي مصر السفلى وأسس الأسرة الخامسة والعشرين الكوشية. حكم الكوشيون مصر لأكثر من قرن.
+
+بعد انتقال العاصمة إلى مروي (حوالي 591 ق.م)، أصبحت المدينة قلب المملكة. تُعرف مروي بأكثر من 200 هرم في ثلاث مجموعات، بنسب نوبية مميزة. أهرامات مروي تعود إلى القرن الثالث قبل الميلاد–الرابع الميلادي وكانت مكان دفن الملوك الكوشيين وأفراد العائلة المالكة.
+
+المصادر: ويكيبيديا – مملكة كوش، مروي، أهرامات مروي`,
       category: PostCategory.HISTORY,
-      tags: ['history', 'kush', 'napata', 'meroe', 'independence'],
-    },
-    {
-      authorId: admin.id,
-      title: 'Sudanese Music and the Pentatonic Scale',
-      titleArabic: 'الموسيقى السودانية والسلم الخماسي',
-      content:
-        'Modern Sudanese music is built on the pentatonic scale, a five-note scale that also appears in Ethiopian, Chinese, Celtic, and African-American blues traditions. This scale gives Sudanese songs their distinctive sweetness and melodic flow, especially in the Haqiba style that emerged in the early 20th century from Sufi devotional chants. Sudanese music blends influences from ancient Nubian heritage, Arab culture, and neighboring African peoples, using instruments such as the oud, tambour, dalooka drum, and various traditional rhythms.',
-      contentAr:
-        'تعتمد الموسيقى السودانية الحديثة على السلم الخماسي، وهو سلم من خمس درجات يظهر أيضاً في الموسيقى الإثيوبية والصينية والاسكتلندية والبلوز الأفرو-أمريكي، مما يمنح الأغاني السودانية نغمة عذبة وتدفقاً لحنياً مميزاً، خاصة في مدرسة الحقيبة التي ظهرت أوائل القرن العشرين متأثرة بإنشاد المديح الصوفي. تمتزج في الموسيقى السودانية تأثيرات التراث النوبي القديم والثقافة العربية والشعوب الإفريقية المجاورة، مع استخدام آلات مثل العود والطنبور والدلوكة والطبول الشعبية وإيقاعات متوارثة في الأفراح والمناسبات.',
-      category: PostCategory.MUSIC,
-      tags: ['music', 'pentatonic', 'haqiba', 'sufi'],
+      tags: ['kush', 'meroe', 'nubia', 'pyramids', 'ancient-sudan'],
     },
     {
       authorId: demoUser.id,
       title: 'The Ja\'alin Tribe: History and Origins',
       titleArabic: 'قبيلة الجعليين: التاريخ والأصول',
-      content:
-        'The Ja\'alin are one of the prominent Arab tribes of northern Sudan, historically settled along the Nile between Khartoum and Abu Hamad. According to tradition, they trace their lineage to al-Abbas ibn Abd al-Muttalib, the uncle of the Prophet Muhammad, and played an important role in the riverain trade and politics of the Sudanese Nile Valley.',
-      contentAr:
-        'تُعد قبيلة الجعليين من أبرز القبائل العربية في شمال السودان، واستقرت تاريخياً على ضفاف النيل بين الخرطوم وأبو حمد. ينسب الجعليون أنفسهم إلى العباس بن عبد المطلب عم النبي محمد، وقد لعبوا دوراً مهماً في التجارة النيلية وفي الحياة السياسية والاجتماعية في منطقة الشمال النيلي.',
+      content: 'The Ja\'alin are one of the prominent tribes of northern Sudan, descended from Abbas ibn Abd al-Muttalib...',
+      contentAr: 'الجعليون من أبرز قبائل شمال السودان، ينحدرون من العباس بن عبد المطلب...',
       category: PostCategory.HISTORY,
       tags: ['jaalin', 'tribe', 'history', 'northern-sudan'],
+    },
+    {
+      authorId: admin.id,
+      title: 'Sudanese Music: Pentatonic Scale and Haqiba',
+      titleArabic: 'الموسيقى السودانية: السلم الخماسي والحقيبة',
+      content: `Sudanese music has deep historical roots shaped by diverse cultural influences. The musical landscape reflects ancient Nubian traditions, Islamic influences introduced through Arab traders, and indigenous African heritage. Sudan's location as a cultural crossroads has created a rich and varied musical tradition.
+
+Sudanese music is fundamentally based on the pentatonic scale—a five-note scale, similar to the black notes on a piano. This characteristic scale is shared with Scottish, Chinese, and Puerto Rican music, as well as Celtic folk music and American blues. The pentatonic scale gives Sudanese music its distinctive melodic sweetness.
+
+Modern Sudanese popular music emerged from Madeeh (Muslim Sufi gospel chants praising the Prophet Muhammad), which evolved into the secular genre Haqiba in the 1930s–1940s. Haqiba is a predominantly vocal art form featuring a lead singer with backing singers who clap rhythmically, often inducing trance-like responses in audiences. The genre influenced neighboring countries including Ethiopia, Somalia, Chad, and Eritrea.
+
+Sources: Wikipedia – Music of Sudan`,
+      contentAr: `للموسيقى السودانية جذور تاريخية عميقة تشكلت بتأثيرات ثقافية متنوعة. يعكس المشهد الموسيقي التقاليد النوبية القديمة، والتأثيرات الإسلامية التي جاءت عبر التجار العرب، والتراث الإفريقي الأصيل. موقع السودان كملتقى ثقافي أنشأ تقليداً موسيقياً غنياً ومتنوعاً.
+
+تعتمد الموسيقى السودانية أساساً على السلم الخماسي—مقياس من خمس نغمات، يشبه المفاتيح السوداء على البيانو. هذا السلم يشترك فيه مع الموسيقى الاسكتلندية والصينية والبورتوريكية، وكذلك فولكلور الكلت والبلوز الأمريكي. يمنح السلم الخماسي الموسيقى السودانية حلاوتها اللحنية المميزة.
+
+الموسيقى الشعبية السودانية الحديثة انبثقت من المديح (أناشيد صوفية في مدح النبي محمد)، التي تطورت إلى فن الحقيبة الدنيوي في ثلاثينيات وأربعينيات القرن العشرين. الحقيبة فن غنائي صوتي بامتياز، بمغني رئيسي ومغنين ثانويين يصفقون إيقاعياً، وغالباً ما يثيرون استجابات شبيهة بالتنويم. أثّر الفن على دول الجوار مثل إثيوبيا والصومال وتشاد وإريتريا.
+
+المصادر: ويكيبيديا – موسيقى السودان`,
+      category: PostCategory.MUSIC,
+      tags: ['music', 'pentatonic', 'haqiba', 'madeeh', 'sudanese-heritage'],
+    },
+    {
+      authorId: admin.id,
+      title: 'UNESCO Heritage: Al-Jertiq and Sudanese Rituals',
+      titleArabic: 'تراث اليونسكو: الجرتيق والطقوس السودانية',
+      content: `In 2025, UNESCO inscribed Al-Jertiq (Al-Jertiq) on the List of Intangible Cultural Heritage in Need of Urgent Safeguarding. This ancient ritual is practiced primarily among Nubian tribes in central and northern Sudan, associated with marriage ceremonies and circumcisions, with roots in the coronation rituals of ancient Sudanese kingdoms.
+
+Sudan has five elements on UNESCO's Representative List of Intangible Cultural Heritage: Al-Jertiq (2025), Henna rituals (2024), Procession and celebrations of Prophet Mohammed's birthday (2023), Arts of engraving on metals (2023), Date palm knowledge and practices (2022), and Arabic calligraphy (2021).
+
+Sources: UNESCO ICH, Wikipedia`,
+      contentAr: `أدرجت اليونسكو عام 2025 طقس الجرتيق في قائمة التراث الثقافي غير المادي المحتاج إلى صون عاجل. يُمارس هذا الطقس القديم خصوصاً في قبائل النوبة بوسط وشمال السودان، ويرتبط باحتفالات الزواج والختان، وجذوره في طقوس التتويج للممالك السودانية القديمة.
+
+يملك السودان خمسة عناصر في القائمة التمثيلية للتراث الثقافي غير المادي لليونسكو: الجرتيق (2025)، طقوس الحناء (2024)، موكب واحتفالات المولد النبوي (2023)، فنون النقش على المعادن (2023)، معرفة وممارسات نخيل التمر (2022)، والخط العربي (2021).
+
+المصادر: اليونسكو، ويكيبيديا`,
+      category: PostCategory.CULTURE,
+      tags: ['unesco', 'jertiq', 'heritage', 'rituals'],
     },
   ]
 
