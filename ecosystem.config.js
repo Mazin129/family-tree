@@ -7,8 +7,9 @@ module.exports = {
   apps: [
     {
       name: 'heritage',
-      script: path.join(__dirname, '.next/standalone/server.js'),
-      cwd: path.join(__dirname, '.next/standalone'),
+      script: path.join(__dirname, 'node_modules/next/dist/bin/next'),
+      args: 'start',
+      cwd: __dirname,
       instances: 1,
       exec_mode: 'fork',
       autorestart: true,

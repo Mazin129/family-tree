@@ -5,7 +5,7 @@ const nextConfig = {
   env: {
     NEXT_PUBLIC_APP_VERSION: version,
   },
-  output: 'standalone',
+  // output: 'standalone',  // disabled so PM2 can use next start from project root
   experimental: {
     serverComponentsExternalPackages: ['neo4j-driver', 'https-proxy-agent'],
   },
