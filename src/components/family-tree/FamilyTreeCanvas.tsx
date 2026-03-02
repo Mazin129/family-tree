@@ -14,16 +14,11 @@ interface FamilyTreeCanvasProps {
   readOnly?:    boolean
 }
 
-// ── Compact card dimensions ──────────────────────────────────────────────────
+// ── Card dimensions (single consistent size) ────────────────────────────────
 const CW  = 160
 const CH  = 64
 const CR  = 12
 const AVR = 18
-
-// ── Expanded card (zoomed in) ────────────────────────────────────────────────
-const EX_CW = 180
-const EX_CH = 130
-const EX_AVR = 28
 
 // ── Spacing ──────────────────────────────────────────────────────────────────
 const SP_GAP = 16
@@ -33,13 +28,11 @@ const V_STR  = 120
 const NS_W = CW * 2 + SP_GAP + H_GAP
 const NS_H = V_STR
 
-// ── Zoom: always show compact cards for stability ───────────────────────────
-const ZOOM_EXPANDED = 0.7
-
-// ── Colours ──────────────────────────────────────────────────────────────────
+// ── Connector lines ─────────────────────────────────────────────────────────
 const CONN  = '#b8a898'
 const C_W   = 1.5
 
+// ── Colours ──────────────────────────────────────────────────────────────────
 const MALE_BG     = '#dbeafe'
 const MALE_BORDER = '#93c5fd'
 const MALE_ACCENT = '#2563eb'
@@ -76,7 +69,6 @@ export function FamilyTreeCanvas({
   const [selectedId,  setSelectedId]  = useState<string | null>(null)
   const [zoomLevel,   setZoomLevel]   = useState(1)
 
-  /** Always show full tree — no collapse/expand, stable layout */
   const filteredData = useMemo(() => data, [data])
 
   const draw = useCallback(() => {
@@ -108,18 +100,17 @@ export function FamilyTreeCanvas({
     const treeW = (Math.max(...xs) - Math.min(...xs)) + NS_W
     const treeH = (Math.max(...ys) - Math.min(...ys)) + NS_H
 
-    // ── Root group ────────────────────────────────────────────────────────
+    // ── Root group (zoom transforms this, not individual nodes) ──────────
     const g = svg.append('g')
     gRef.current = g.node()
 
-    // ── Zoom ──────────────────────────────────────────────────────────────
+    // ── Zoom (only transforms the group — never redraws) ────────────────
     const zoom = d3.zoom<SVGSVGElement, unknown>()
       .scaleExtent([0.02, 5])
       .on('zoom', (e) => {
         g.attr('transform', e.transform.toString())
         transformRef.current = e.transform
-        const k = e.transform.k
-        if (Math.abs(k - zoomLevel) > 0.02) setZoomLevel(k)
+        setZoomLevel(Math.round(e.transform.k * 100))
       })
     zoomRef.current = zoom
     svg.call(zoom)
@@ -128,8 +119,7 @@ export function FamilyTreeCanvas({
       const padX = 80, padY = 60
       const scaleX = W / (treeW + padX * 2)
       const scaleY = H / (treeH + padY * 2)
-      const fitScale = Math.min(scaleX, scaleY, 1.2)
-      const scale = Math.max(fitScale, 0.35)
+      const scale = Math.max(Math.min(scaleX, scaleY, 1.2), 0.35)
       const rootX = allNodes[0].x!
       const rootY = allNodes[0].y!
       const initT = d3.zoomIdentity
@@ -200,11 +190,12 @@ export function FamilyTreeCanvas({
       return language === 'ar' ? tatweelName(raw || '', 1) : (raw || '')
     }
 
-    // ── Compact card (default) ────────────────────────────────────────────
-    function renderCompactCard(el: SVGGElement, person: ExtTreeNode, ox: number, isSel: boolean) {
+    // ── Render card (always the same size — stable) ─────────────────────
+    function renderCard(el: SVGGElement, person: ExtTreeNode, isSel: boolean) {
       const g = d3.select(el)
       const c = pal(person)
       const name = getName(person)
+      const ox = -CW / 2
 
       g.append('rect')
         .attr('x', ox).attr('y', -CH / 2).attr('width', CW).attr('height', CH).attr('rx', CR)
@@ -222,7 +213,7 @@ export function FamilyTreeCanvas({
         .attr('fill', c.avBg).attr('stroke', c.border).attr('stroke-width', 1.2)
 
       if (person.photo) {
-        const cid = `ac-${person.id}-${ox}`
+        const cid = `ac-${person.id}`
         g.append('defs').append('clipPath').attr('id', cid)
           .append('circle').attr('cx', avCX).attr('cy', avCY).attr('r', AVR)
         g.append('image').attr('href', person.photo)
@@ -264,70 +255,6 @@ export function FamilyTreeCanvas({
       }
     }
 
-    // ── Expanded card (zoomed in) ─────────────────────────────────────────
-    function renderExpandedCard(el: SVGGElement, person: ExtTreeNode, ox: number, isSel: boolean) {
-      const g = d3.select(el)
-      const c = pal(person)
-      const name = getName(person)
-      const w = EX_CW
-      const h = EX_CH
-
-      g.append('rect').attr('x', ox).attr('y', -h / 2).attr('width', w).attr('height', h).attr('rx', CR)
-        .attr('fill', c.bg).attr('stroke', isSel ? '#d97706' : c.border)
-        .attr('stroke-width', isSel ? 2.5 : 1.5)
-        .attr('filter', isSel ? 'url(#card-shadow-sel)' : 'url(#card-shadow)')
-
-      g.append('rect').attr('x', ox).attr('y', -h / 2).attr('width', w).attr('height', 6).attr('rx', CR)
-        .attr('fill', c.accent)
-
-      const avCX = ox + w / 2
-      const avCY = -h / 2 + 18 + EX_AVR
-      g.append('circle').attr('cx', avCX).attr('cy', avCY).attr('r', EX_AVR + 2)
-        .attr('fill', 'white').attr('stroke', c.border).attr('stroke-width', 1.5)
-      g.append('circle').attr('cx', avCX).attr('cy', avCY).attr('r', EX_AVR).attr('fill', c.avBg)
-
-      if (person.photo) {
-        const cid = `ae-${person.id}-${ox}`
-        g.append('defs').append('clipPath').attr('id', cid)
-          .append('circle').attr('cx', avCX).attr('cy', avCY).attr('r', EX_AVR)
-        g.append('image').attr('href', person.photo)
-          .attr('x', avCX - EX_AVR).attr('y', avCY - EX_AVR)
-          .attr('width', EX_AVR * 2).attr('height', EX_AVR * 2)
-          .attr('clip-path', `url(#${cid})`).attr('preserveAspectRatio', 'xMidYMid slice')
-      } else {
-        g.append('text').attr('x', avCX).attr('y', avCY + 6)
-          .attr('text-anchor', 'middle').attr('font-size', 18).attr('font-weight', '700')
-          .attr('font-family', "'Cairo', sans-serif").attr('fill', c.accent)
-          .text((name || '؟').charAt(0))
-      }
-
-      const nameY = avCY + EX_AVR + 16
-      g.append('text').attr('x', avCX).attr('y', nameY)
-        .attr('text-anchor', 'middle').attr('font-size', 13).attr('font-weight', '700')
-        .attr('font-family', "'Cairo', 'Tajawal', sans-serif").attr('fill', c.text)
-        .text(clip(name || 'مجهول', 16))
-
-      const meta: string[] = []
-      if (person.tribe) meta.push(person.tribe)
-      if (person.birthYear) meta.push(`${person.birthYear}${person.deathYear ? ` – ${person.deathYear}` : ''}`)
-      if (!person.isAlive && !person.deathYear) meta.push('†')
-      if (meta.length) {
-        g.append('text').attr('x', avCX).attr('y', nameY + 16)
-          .attr('text-anchor', 'middle').attr('font-size', 10).attr('font-family', "'Cairo', sans-serif")
-          .attr('fill', '#64748b')
-          .text(clip(meta.join(' · '), 24))
-      }
-
-      const spouseCount = person.spouses?.length ?? 0
-      if (spouseCount > 0) {
-        const spName = getName(person.spouses![0])
-        g.append('text').attr('x', avCX).attr('y', nameY + 30)
-          .attr('text-anchor', 'middle').attr('font-size', 9.5).attr('font-family', "'Cairo', sans-serif")
-          .attr('fill', '#92400e')
-          .text(`♥ ${clip(spName, 14)}${spouseCount > 1 ? ` (+${spouseCount - 1})` : ''}`)
-      }
-    }
-
     // ── Node groups ───────────────────────────────────────────────────────
     const nodeGs = g.append('g').attr('class', 'nodes-layer')
       .selectAll<SVGGElement, HNode>('.node')
@@ -340,21 +267,13 @@ export function FamilyTreeCanvas({
     nodeGs.each(function(d) {
       const person = d.data
       const isSel = person.id === selectedId
-      const z = transformRef.current.k
+      renderCard(this, person, isSel)
 
-      if (z >= ZOOM_EXPANDED) {
-        renderExpandedCard(this, person, -EX_CW / 2, isSel)
-      } else {
-        renderCompactCard(this, person, -CW / 2, isSel)
-      }
-
-      const node = person as ExtTreeNode
-      const hasKids = (node.children && node.children.length > 0)
+      const hasKids = (person.children && person.children.length > 0)
 
       // ── Add button ────────────────────────────────────────────────────
-      if (!readOnly && !node._collapsed) {
-        const cardH = z >= ZOOM_EXPANDED ? EX_CH : CH
-        const addBtnY = cardH / 2 + (hasKids ? 28 : 8)
+      if (!readOnly) {
+        const addBtnY = CH / 2 + (hasKids ? 28 : 8)
         const addBtn = d3.select(this).append('g')
           .attr('class', 'add-btn')
           .attr('transform', `translate(0,${addBtnY})`)
@@ -387,7 +306,7 @@ export function FamilyTreeCanvas({
       })
 
     svg.on('click', () => { setSelectedId(null) })
-  }, [filteredData, selectedId, language, readOnly, onNodeClick, onNodeAdd, onViewSubtree, zoomLevel])
+  }, [filteredData, selectedId, language, readOnly, onNodeClick, onNodeAdd, onViewSubtree])
 
   useEffect(() => { draw() }, [draw])
 
@@ -444,7 +363,7 @@ export function FamilyTreeCanvas({
 
       {/* ── Zoom level indicator ───────────────────────────────────────── */}
       <div className="absolute top-3 left-3 bg-white/80 rounded-lg px-2 py-1 border border-sand-100 text-[10px] text-khartoum-500 font-mono z-10">
-        {Math.round(zoomLevel * 100)}%
+        {zoomLevel}%
       </div>
     </div>
   )
