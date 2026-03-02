@@ -27,7 +27,6 @@ export const GOOGLE_OAUTH_ENABLED = googleConfigured
 // The exact redirect URI that must be registered in Google Cloud Console:
 //   {NEXTAUTH_URL}/api/auth/callback/google
 // e.g. https://sudandna.com/api/auth/callback/google
-
 // Keep users logged in for 30 days after successful login (Gmail and credentials)
 const THIRTY_DAYS_SECONDS = 30 * 24 * 60 * 60
 const ONE_DAY_SECONDS = 24 * 60 * 60
@@ -41,6 +40,21 @@ export const authOptions: NextAuthOptions = {
   },
   jwt: {
     maxAge: THIRTY_DAYS_SECONDS,     // JWT expiry matches session (30 days)
+  },
+  // Explicit cookie configuration so Chrome keeps the session cookie
+  cookies: {
+    sessionToken: {
+      name:
+        process.env.NODE_ENV === 'production'
+          ? '__Secure-next-auth.session-token'
+          : 'next-auth.session-token',
+      options: {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        secure: process.env.NODE_ENV === 'production',
+      },
+    },
   },
   pages: {
     signIn:  '/login',
