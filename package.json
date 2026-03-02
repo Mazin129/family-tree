@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && next build && (pm2 restart heritage --update-env 2>/dev/null || true)",
+    "verify-build": "node scripts/verify-build-files.js",
     "start": "next start",
     "lint": "next lint",
     "db:push": "prisma db push",
