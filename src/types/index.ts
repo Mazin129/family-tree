@@ -3,7 +3,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type Language = 'ar' | 'en'
-export type Gender = 'MALE' | 'FEMALE' | 'UNSPECIFIED'
+export type Gender = 'MALE' | 'FEMALE'
 export type PrivacyLevel = 'PUBLIC' | 'COMMUNITY' | 'FAMILY' | 'PRIVATE'
 export type UserRole = 'ADMIN' | 'MODERATOR' | 'MEMBER' | 'GUEST'
 export type CollaboratorRole = 'VIEWER' | 'EDITOR' | 'ADMIN'

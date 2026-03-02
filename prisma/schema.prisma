@@ -456,7 +456,6 @@ enum Language {
 enum Gender {
   MALE
   FEMALE
-  UNSPECIFIED
 }
 
 enum Region {

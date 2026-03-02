@@ -283,9 +283,8 @@ export function AddMemberModal({ treeId, relativeOf, addParentHint, onSuccess, o
               <label className="label">الجنس *</label>
               <div className="flex gap-3">
                 {[
-                  { value: 'MALE',        label: 'ذكر',       color: 'nile'   },
-                  { value: 'FEMALE',      label: 'أنثى',      color: 'sahara' },
-                  { value: 'UNSPECIFIED', label: 'غير محدد', color: 'khartoum'},
+                  { value: 'MALE',   label: 'ذكر',  color: 'nile' },
+                  { value: 'FEMALE', label: 'أنثى', color: 'sahara' },
                 ].map(g => (
                   <label
                     key={g.value}
@@ -294,9 +293,7 @@ export function AddMemberModal({ treeId, relativeOf, addParentHint, onSuccess, o
                       watch('gender') === g.value
                         ? g.color === 'nile'
                           ? 'border-nile-400 bg-nile-50 text-nile-700'
-                          : g.color === 'sahara'
-                          ? 'border-sahara-400 bg-sahara-50 text-sahara-700'
-                          : 'border-khartoum-400 bg-khartoum-50 text-khartoum-700'
+                          : 'border-sahara-400 bg-sahara-50 text-sahara-700'
                         : 'border-khartoum-200 hover:border-khartoum-300'
                     )}
                   >
