@@ -62,26 +62,6 @@ const DEAD_ACCENT = '#94a3b8'
 const DEAD_AV_BG  = '#e2e8f0'
 const DEAD_TEXT   = '#334155'
 
-/** No depth limit: show all generations. Collapse only via explicit expand/collapse. */
-const DEFAULT_EXPAND_DEPTH = 999
-
-function countChildren(node: TreeNode): number {
-  return (node.children?.length ?? 0) + (node.children?.reduce((s, c) => s + countChildren(c), 0) ?? 0)
-}
-
-function filterCollapsed(node: TreeNode, collapsed: Set<string>, depth: number, maxDepth: number): TreeNode {
-  const isCollapsed = collapsed.has(node.id) || depth >= maxDepth
-  const childCount = countChildren(node)
-  if (isCollapsed || !node.children?.length) {
-    return { ...node, children: undefined, _collapsed: childCount > 0, _childCount: childCount }
-  }
-  return {
-    ...node,
-    children: node.children.map(c => filterCollapsed(c, collapsed, depth + 1, maxDepth)),
-    _collapsed: false,
-  }
-}
-
 interface ExtTreeNode extends TreeNode {
   _collapsed?: boolean
   _childCount?: number
@@ -98,12 +78,10 @@ export function FamilyTreeCanvas({
   const gRef         = useRef<SVGGElement | null>(null)
 
   const [selectedId,  setSelectedId]  = useState<string | null>(null)
-  const [collapsed,   setCollapsed]   = useState<Set<string>>(new Set())
   const [zoomLevel,   setZoomLevel]   = useState(1)
 
-  const filteredData = useMemo(() => {
-    return filterCollapsed(data, collapsed, 0, DEFAULT_EXPAND_DEPTH)
-  }, [data, collapsed])
+  /** Always show full tree — no collapse/expand, stable layout */
+  const filteredData = useMemo(() => data, [data])
 
   const draw = useCallback(() => {
     if (!svgRef.current || !filteredData) return
@@ -442,17 +420,6 @@ export function FamilyTreeCanvas({
     draw()
   }
 
-  function expandAll() { setCollapsed(new Set()) }
-  function collapseAll() {
-    const ids = new Set<string>()
-    function walk(n: TreeNode, depth: number) {
-      if (depth >= 2 && n.children?.length) ids.add(n.id)
-      n.children?.forEach(c => walk(c, depth + 1))
-    }
-    walk(data, 0)
-    setCollapsed(ids)
-  }
-
   return (
     <div ref={containerRef} className="relative w-full h-full overflow-hidden select-none tree-canvas-bg">
       <svg ref={svgRef} className="w-full h-full" style={{ minHeight: 500 }} />
@@ -469,18 +436,6 @@ export function FamilyTreeCanvas({
             {b.label}
           </button>
         ))}
-      </div>
-
-      {/* ── Expand/Collapse all ────────────────────────────────────────── */}
-      <div className="absolute top-3 right-3 flex gap-1.5 z-20" dir="rtl">
-        <button onClick={expandAll} title="توسيع الكل"
-          className="px-2.5 py-1 rounded-lg bg-white/90 border border-sand-200 shadow-sm text-[10px] font-semibold text-khartoum-600 hover:bg-sand-100 transition-colors">
-          توسيع ▼
-        </button>
-        <button onClick={collapseAll} title="طي الكل"
-          className="px-2.5 py-1 rounded-lg bg-white/90 border border-sand-200 shadow-sm text-[10px] font-semibold text-khartoum-600 hover:bg-sand-100 transition-colors">
-          طي ▲
-        </button>
       </div>
 
       {/* ── Legend ─────────────────────────────────────────────────────── */}
