@@ -33,12 +33,8 @@ const V_STR  = 120
 const NS_W = CW * 2 + SP_GAP + H_GAP
 const NS_H = V_STR
 
-// ── Zoom thresholds for semantic zoom ────────────────────────────────────────
+// ── Zoom: always show compact cards for stability ───────────────────────────
 const ZOOM_EXPANDED = 0.7
-const ZOOM_COMPACT  = 0.25
-// > ZOOM_EXPANDED  → expanded card with details
-// ZOOM_COMPACT..ZOOM_EXPANDED → compact card (name only)
-// < ZOOM_COMPACT → dot/pill mode
 
 // ── Colours ──────────────────────────────────────────────────────────────────
 const CONN  = '#b8a898'
@@ -132,13 +128,14 @@ export function FamilyTreeCanvas({
       const padX = 80, padY = 60
       const scaleX = W / (treeW + padX * 2)
       const scaleY = H / (treeH + padY * 2)
-      const scale = Math.min(scaleX, scaleY, 1.2)
-      const cx = (Math.min(...xs) + Math.max(...xs)) / 2
-      const cy = (Math.min(...ys) + Math.max(...ys)) / 2
+      const fitScale = Math.min(scaleX, scaleY, 1.2)
+      const scale = Math.max(fitScale, 0.35)
+      const rootX = allNodes[0].x!
+      const rootY = allNodes[0].y!
       const initT = d3.zoomIdentity
-        .translate(W / 2, H / 2)
+        .translate(W / 2, padY + 40)
         .scale(scale)
-        .translate(-cx, -cy)
+        .translate(-rootX, -rootY)
       svg.call(zoom.transform, initT)
       transformRef.current = initT
       initialFitDone.current = true
@@ -331,14 +328,6 @@ export function FamilyTreeCanvas({
       }
     }
 
-    // ── Dot/pill mode (far zoom) ──────────────────────────────────────────
-    function renderDot(el: SVGGElement, person: ExtTreeNode) {
-      const g = d3.select(el)
-      const c = pal(person)
-      g.append('circle').attr('cx', 0).attr('cy', 0).attr('r', 8)
-        .attr('fill', c.accent).attr('stroke', 'white').attr('stroke-width', 1.5)
-    }
-
     // ── Node groups ───────────────────────────────────────────────────────
     const nodeGs = g.append('g').attr('class', 'nodes-layer')
       .selectAll<SVGGElement, HNode>('.node')
@@ -353,9 +342,7 @@ export function FamilyTreeCanvas({
       const isSel = person.id === selectedId
       const z = transformRef.current.k
 
-      if (z < ZOOM_COMPACT) {
-        renderDot(this, person)
-      } else if (z >= ZOOM_EXPANDED) {
+      if (z >= ZOOM_EXPANDED) {
         renderExpandedCard(this, person, -EX_CW / 2, isSel)
       } else {
         renderCompactCard(this, person, -CW / 2, isSel)
