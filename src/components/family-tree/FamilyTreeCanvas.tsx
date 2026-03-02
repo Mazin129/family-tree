@@ -187,7 +187,8 @@ export function FamilyTreeCanvas({
 
     function getName(p: ExtTreeNode) {
       const raw = language === 'ar' ? (p.nameArabic || p.name) : p.name
-      return language === 'ar' ? tatweelName(raw || '', 1) : (raw || '')
+      // Show the clean name without decorative tatweel / stretching
+      return raw || ''
     }
 
     // ── Render card (always the same size — stable) ─────────────────────
@@ -227,19 +228,19 @@ export function FamilyTreeCanvas({
           .text((name || '؟').charAt(0))
       }
 
-      const textX = ox + 56
-      g.append('text').attr('x', textX).attr('y', -6)
-        .attr('text-anchor', 'start').attr('font-size', 12.5).attr('font-weight', '700')
+      // Center the main name text within the card
+      const textX = ox + CW / 2
+      g.append('text').attr('x', textX).attr('y', 0)
+        .attr('text-anchor', 'middle').attr('font-size', 12.5).attr('font-weight', '700')
         .attr('font-family', "'Cairo', 'Tajawal', sans-serif").attr('fill', c.text)
         .text(clip(name || 'مجهول', 14))
 
       const meta: string[] = []
       if (person.tribe) meta.push(person.tribe)
       if (person.birthYear) meta.push(`${person.birthYear}`)
-      if (!person.isAlive) meta.push('†')
       if (meta.length) {
-        g.append('text').attr('x', textX).attr('y', 12)
-          .attr('text-anchor', 'start').attr('font-size', 10).attr('font-family', "'Cairo', sans-serif")
+        g.append('text').attr('x', textX).attr('y', 16)
+          .attr('text-anchor', 'middle').attr('font-size', 10).attr('font-family', "'Cairo', sans-serif")
           .attr('fill', '#64748b')
           .text(clip(meta.join(' · '), 20))
       }
@@ -248,8 +249,8 @@ export function FamilyTreeCanvas({
       if (spouseCount > 0) {
         const sp = person.spouses![0]
         const spName = getName(sp)
-        g.append('text').attr('x', textX).attr('y', 26)
-          .attr('text-anchor', 'start').attr('font-size', 9).attr('font-family', "'Cairo', sans-serif")
+        g.append('text').attr('x', textX).attr('y', 30)
+          .attr('text-anchor', 'middle').attr('font-size', 9).attr('font-family', "'Cairo', sans-serif")
           .attr('fill', '#92400e')
           .text(`♥ ${clip(spName, 12)}${spouseCount > 1 ? ` (+${spouseCount - 1})` : ''}`)
       }
