@@ -167,7 +167,7 @@ async function main() {
         description: 'Western Sudan is home to distinctive folk dances associated with rites of passage and community celebrations.',
         descriptionAr: 'تزخر مناطق غرب السودان برقصات شعبية مثل الكمبلا المرتبطة بمراحل البلوغ وتحمل المسؤولية، وتُؤدى بملابس وأقنعة ترمز للقوة والشجاعة في المجتمع.',
         category: 'DANCE' as any,
-        region: Region.DARFUR,
+        region: Region.WEST_DARFUR,
         isVerified: true,
         isPublic: true,
         tags: ['dance', 'kambala', 'folk'],
