@@ -4,14 +4,14 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "npx prisma generate && next build && cp -r .next/static .next/standalone/.next/static && (cp -r public .next/standalone/public 2>/dev/null || true) && (pm2 restart heritage --update-env 2>/dev/null || true)",
+    "build": "node -r dotenv/config node_modules/.bin/prisma generate && next build && cp -r .next/static .next/standalone/.next/static && (cp -r public .next/standalone/public 2>/dev/null || true) && (pm2 restart heritage --update-env 2>/dev/null || true)",
     "start": "next start",
     "lint": "next lint",
-    "db:push": "npx prisma db push",
-    "db:migrate": "npx prisma migrate dev",
-    "db:studio": "npx prisma studio",
-    "db:seed": "npx prisma generate && npx tsx prisma/seed.ts",
-    "db:reset": "npx prisma migrate reset --force && npm run db:seed",
+    "db:push": "node -r dotenv/config node_modules/.bin/prisma db push",
+    "db:migrate": "node -r dotenv/config node_modules/.bin/prisma migrate dev",
+    "db:studio": "node -r dotenv/config node_modules/.bin/prisma studio",
+    "db:seed": "node -r dotenv/config node_modules/.bin/prisma generate && node -r dotenv/config node_modules/.bin/tsx prisma/seed.ts",
+    "db:reset": "node -r dotenv/config node_modules/.bin/prisma migrate reset --force && npm run db:seed",
     "ai:dev": "cd ai-service && uvicorn main:app --reload --port 8001"
   },
   "dependencies": {
