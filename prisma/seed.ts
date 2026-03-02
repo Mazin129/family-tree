@@ -1,13 +1,13 @@
 import 'dotenv/config'
 import { PrismaClient, UserRole, Language, Gender, Region, PrivacyLevel, PostCategory } from '@prisma/client'
-import { PrismaPg } from '@prisma/adapter-pg'
 import bcrypt from 'bcryptjs'
 
-const adapter = new PrismaPg({
-  connectionString: process.env.DATABASE_URL!,
-})
+if (!process.env.DATABASE_URL) {
+  console.error('❌ DATABASE_URL is not set. Add it to .env and run again.')
+  process.exit(1)
+}
 
-const prisma = new PrismaClient({ adapter })
+const prisma = new PrismaClient()
 
 async function main() {
   console.log('🌱 Seeding database...')
