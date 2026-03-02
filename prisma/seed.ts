@@ -1,4 +1,9 @@
-import 'dotenv/config'
+import path from 'path'
+import { config } from 'dotenv'
+
+// Load .env from project root
+config({ path: path.join(process.cwd(), '.env') })
+
 import { PrismaClient, UserRole, Language, Gender, Region, PrivacyLevel, PostCategory } from '@prisma/client'
 import bcrypt from 'bcryptjs'
 
