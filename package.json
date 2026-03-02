@@ -10,7 +10,7 @@
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
-    "db:seed": "npx tsx prisma/seed.ts",
+    "db:seed": "prisma generate && npx tsx prisma/seed.ts",
     "db:reset": "prisma migrate reset --force && npm run db:seed",
     "ai:dev": "cd ai-service && uvicorn main:app --reload --port 8001"
   },
