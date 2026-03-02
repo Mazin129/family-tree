@@ -2,12 +2,14 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useParams } from 'next/navigation'
-import { FamilyTreeCanvas } from '@/components/family-tree/FamilyTreeCanvas'
-import { MemberCard }        from '@/components/family-tree/MemberCard'
-import { AddMemberModal }     from '@/components/family-tree/AddMemberModal'
-import { EditMemberModal }    from '@/components/family-tree/EditMemberModal'
-import { BulkAddMembersModal } from '@/components/family-tree/BulkAddMembersModal'
-import { ShareModal }        from '@/components/family-tree/ShareModal'
+import {
+  FamilyTreeCanvas,
+  MemberCard,
+  AddMemberModal,
+  EditMemberModal,
+  BulkAddMembersModal,
+  ShareModal,
+} from '@/components/family-tree'
 import { AIInsightsPanel }   from '@/components/ai/AIInsightsPanel'
 import { toast }             from 'sonner'
 import {
