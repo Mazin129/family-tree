@@ -96,18 +96,42 @@ async function main() {
       authorId: admin.id,
       title: 'Welcome to the Sudanese Heritage Platform',
       titleArabic: 'مرحباً بكم في منصة التراث السوداني',
-      content: 'We are thrilled to launch this platform dedicated to preserving and celebrating Sudanese cultural heritage...',
-      contentAr: 'يسعدنا إطلاق هذه المنصة المكرسة للحفاظ على التراث الثقافي السوداني والاحتفاء به...',
+      content: 'We are thrilled to launch this platform dedicated to preserving and celebrating Sudanese cultural heritage.',
+      contentAr: 'يسعدنا إطلاق هذه المنصة المكرسة للحفاظ على التراث الثقافي السوداني والاحتفاء به.',
       category: PostCategory.GENERAL,
       isPinned: true,
       tags: ['welcome', 'heritage', 'platform'],
     },
     {
+      authorId: admin.id,
+      title: 'Sudan Through the Ages: From Kush to Independence',
+      titleArabic: 'السودان عبر العصور: من مملكة كوش إلى الاستقلال',
+      content:
+        'Sudan is home to some of the world\'s oldest civilizations. The Kingdom of Kush, centered at Napata and later Meroë, flourished along the Nile and built steep pyramids, temples, and royal cities that rivaled ancient Egypt. After the fall of Kush, Christian Nubian kingdoms such as Nobatia, Makuria, and Alodia dominated the region before gradually giving way to Islamic sultanates and, later, Ottoman-Egyptian and Anglo-Egyptian rule. Modern Sudan gained independence in 1956, inheriting a rich and diverse historical legacy.',
+      contentAr:
+        'يُعد السودان من أقدم مناطق العالم المأهولة، حيث ازدهرت على ضفاف النيل حضارات مبكرة أبرزها مملكة كوش التي اتخذت من نبتة ثم مروي عاصمة لها، وشيدت أهرامات ومعابد ومدناً ملكية لا تزال آثارها قائمة حتى اليوم. أعقبتها الممالك النوبية المسيحية مثل نوباتيا والمقرة وعلوة، ثم ظهرت السلطنات الإسلامية كسلطنة سنار في الشرق وممالك دارفور في الغرب، قبل أن يخضع السودان للحكم التركي المصري ثم الثنائي الإنجليزي المصري. نال السودان استقلاله عام 1956 حاملاً إرثاً تاريخياً متنوعاً يعكس تلاقي حضارات إفريقيا ووادي النيل.',
+      category: PostCategory.HISTORY,
+      tags: ['history', 'kush', 'napata', 'meroe', 'independence'],
+    },
+    {
+      authorId: admin.id,
+      title: 'Sudanese Music and the Pentatonic Scale',
+      titleArabic: 'الموسيقى السودانية والسلم الخماسي',
+      content:
+        'Modern Sudanese music is built on the pentatonic scale, a five-note scale that also appears in Ethiopian, Chinese, Celtic, and African-American blues traditions. This scale gives Sudanese songs their distinctive sweetness and melodic flow, especially in the Haqiba style that emerged in the early 20th century from Sufi devotional chants. Sudanese music blends influences from ancient Nubian heritage, Arab culture, and neighboring African peoples, using instruments such as the oud, tambour, dalooka drum, and various traditional rhythms.',
+      contentAr:
+        'تعتمد الموسيقى السودانية الحديثة على السلم الخماسي، وهو سلم من خمس درجات يظهر أيضاً في الموسيقى الإثيوبية والصينية والاسكتلندية والبلوز الأفرو-أمريكي، مما يمنح الأغاني السودانية نغمة عذبة وتدفقاً لحنياً مميزاً، خاصة في مدرسة الحقيبة التي ظهرت أوائل القرن العشرين متأثرة بإنشاد المديح الصوفي. تمتزج في الموسيقى السودانية تأثيرات التراث النوبي القديم والثقافة العربية والشعوب الإفريقية المجاورة، مع استخدام آلات مثل العود والطنبور والدلوكة والطبول الشعبية وإيقاعات متوارثة في الأفراح والمناسبات.',
+      category: PostCategory.MUSIC,
+      tags: ['music', 'pentatonic', 'haqiba', 'sufi'],
+    },
+    {
       authorId: demoUser.id,
       title: 'The Ja\'alin Tribe: History and Origins',
       titleArabic: 'قبيلة الجعليين: التاريخ والأصول',
-      content: 'The Ja\'alin are one of the prominent tribes of northern Sudan, descended from Abbas ibn Abd al-Muttalib...',
-      contentAr: 'الجعليون من أبرز قبائل شمال السودان، ينحدرون من العباس بن عبد المطلب...',
+      content:
+        'The Ja\'alin are one of the prominent Arab tribes of northern Sudan, historically settled along the Nile between Khartoum and Abu Hamad. According to tradition, they trace their lineage to al-Abbas ibn Abd al-Muttalib, the uncle of the Prophet Muhammad, and played an important role in the riverain trade and politics of the Sudanese Nile Valley.',
+      contentAr:
+        'تُعد قبيلة الجعليين من أبرز القبائل العربية في شمال السودان، واستقرت تاريخياً على ضفاف النيل بين الخرطوم وأبو حمد. ينسب الجعليون أنفسهم إلى العباس بن عبد المطلب عم النبي محمد، وقد لعبوا دوراً مهماً في التجارة النيلية وفي الحياة السياسية والاجتماعية في منطقة الشمال النيلي.',
       category: PostCategory.HISTORY,
       tags: ['jaalin', 'tribe', 'history', 'northern-sudan'],
     },
