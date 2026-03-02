@@ -9,9 +9,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { TreePine, Mail, Lock, Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react'
 import { toast } from 'sonner'
-import { useLanguage } from '@/lib/i18n/store'
-import { createT } from '@/lib/i18n/translations'
-import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher'
+import { useLanguage, createT, LanguageSwitcher } from '../auth-i18n'
 
 function LoginForm() {
   const router       = useRouter()
