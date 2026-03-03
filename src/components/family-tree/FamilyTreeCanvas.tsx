@@ -103,50 +103,72 @@ export function FamilyTreeCanvas({
       type HNode = d3.HierarchyPointNode<ExtTreeNode>
 
       if (layout === 'centeredClassic') {
-        // Classic centered layout:
-        // - Root in the middle
-        // - Descendants spread symmetrically to left and right by generation
-        const levels = new Map<number, HNode[]>()
-        ;(root as any).each((n: HNode) => {
-          const d = n.depth || 0
-          if (!levels.has(d)) levels.set(d, [])
-          levels.get(d)!.push(n)
-        })
+        // Classic centered patriarch layout:
+        // - Root (patriarch) in the center
+        // - First half of children + their entire subtrees go LEFT
+        // - Second half of children + their entire subtrees go RIGHT
+        // - Generations expand outward horizontally from center
+        // - No crossing lines between left and right sides
 
-        const baseYGap = NS_H * 0.9
-        const baseXGap = NS_W * 0.9
+        const X_GAP = CW + H_GAP + 40
+        const Y_GAP = CH + 24
 
-        // Root at center
         const rootNode = root as unknown as HNode
         rootNode.x = 0
         rootNode.y = 0
 
-        // For each generation, place nodes half to the left and half to the right
-        ;[...levels.entries()]
-          .filter(([d]) => d > 0)
-          .sort(([a], [b]) => a - b)
-          .forEach(([depth, nodes]) => {
-            const genOffset = depth * baseXGap
-            const sorted = nodes.slice().sort((a, b) => (a.data.name || '').localeCompare(b.data.name || ''))
+        const directChildren = (rootNode.children || []) as HNode[]
+        const mid = Math.ceil(directChildren.length / 2)
+        const leftChildren  = directChildren.slice(0, mid)
+        const rightChildren = directChildren.slice(mid)
 
-            const mid = Math.ceil(sorted.length / 2)
-            const left = sorted.slice(0, mid)
-            const right = sorted.slice(mid)
+        // Recursively lay out a subtree expanding horizontally on one side.
+        // side = -1 for left, +1 for right.
+        // Returns the next available y position (to avoid overlap).
+        function layoutSubtree(node: HNode, depth: number, side: -1 | 1, yStart: number): number {
+          node.x = side * depth * X_GAP
+          const kids = (node.children || []) as HNode[]
 
-            const placeSide = (items: HNode[], side: -1 | 1) => {
-              if (items.length === 0) return
-              const total = items.length
-              const span = (total - 1) * baseYGap
-              const startY = -span / 2
-              items.forEach((n, i) => {
-                n.x = side * genOffset
-                n.y = startY + i * baseYGap
-              })
-            }
+          if (kids.length === 0) {
+            node.y = yStart
+            return yStart + Y_GAP
+          }
 
-            placeSide(left, -1)
-            placeSide(right, 1)
-          })
+          let nextY = yStart
+          for (const child of kids) {
+            nextY = layoutSubtree(child, depth + 1, side, nextY)
+          }
+
+          // Center parent vertically among its children
+          const firstY = kids[0].y
+          const lastY  = kids[kids.length - 1].y
+          node.y = (firstY + lastY) / 2
+
+          return nextY
+        }
+
+        // Layout left side (expanding from center upward)
+        let leftNextY = 0
+        for (const child of leftChildren) {
+          leftNextY = layoutSubtree(child, 1, -1, leftNextY)
+        }
+        const leftTotalH = leftNextY - Y_GAP
+        const leftShift  = -leftTotalH / 2
+        function shiftSubtree(node: HNode, dy: number) {
+          node.y += dy
+          for (const c of (node.children || []) as HNode[]) shiftSubtree(c, dy)
+        }
+        for (const child of leftChildren) shiftSubtree(child, leftShift)
+
+        // Layout right side (expanding from center upward)
+        let rightNextY = 0
+        for (const child of rightChildren) {
+          rightNextY = layoutSubtree(child, 1, 1, rightNextY)
+        }
+        const rightTotalH = rightNextY - Y_GAP
+        const rightShift  = -rightTotalH / 2
+        for (const child of rightChildren) shiftSubtree(child, rightShift)
+
       } else {
         // Original vertical layout (also used as base for horizontal)
         d3.tree<ExtTreeNode>()
@@ -212,32 +234,67 @@ export function FamilyTreeCanvas({
         byParent.get(s)!.push(t)
       })
 
-      byParent.forEach((children, parent) => {
-        const px = parent.x
-        const topY = parent.y + CH / 2 + 6
-        const botY = children[0].y - CH / 2 - 6
-        const midY = topY + (botY - topY) * 0.5
+      if (layout === 'centeredClassic') {
+        // Horizontal connectors: parent → midX → vertical rail → children
+        byParent.forEach((children, parent) => {
+          const side = children[0].x > parent.x ? 1 : -1
+          const edgeX = parent.x + side * (CW / 2 + 6)
+          const midX  = edgeX + side * ((Math.abs(children[0].x - parent.x) - CW) / 2)
 
-        const path = d3.path()
-        path.moveTo(px, topY)
-        path.lineTo(px, midY)
-        connLayer.append('path').attr('d', path.toString())
-          .attr('fill', 'none').attr('stroke', CONN).attr('stroke-width', C_W)
-
-        if (children.length > 1) {
-          const minCX = Math.min(...children.map(c => c.x))
-          const maxCX = Math.max(...children.map(c => c.x))
+          // Line from parent edge to midpoint
           connLayer.append('line')
-            .attr('x1', minCX).attr('y1', midY).attr('x2', maxCX).attr('y2', midY)
+            .attr('x1', edgeX).attr('y1', parent.y)
+            .attr('x2', midX).attr('y2', parent.y)
             .attr('stroke', CONN).attr('stroke-width', C_W)
-        }
 
-        children.forEach(child => {
-          connLayer.append('line')
-            .attr('x1', child.x).attr('y1', midY).attr('x2', child.x).attr('y2', botY)
-            .attr('stroke', CONN).attr('stroke-width', C_W)
+          // Vertical rail spanning all children
+          if (children.length > 1) {
+            const minCY = Math.min(...children.map(c => c.y))
+            const maxCY = Math.max(...children.map(c => c.y))
+            connLayer.append('line')
+              .attr('x1', midX).attr('y1', minCY)
+              .attr('x2', midX).attr('y2', maxCY)
+              .attr('stroke', CONN).attr('stroke-width', C_W)
+          }
+
+          // Horizontal line from rail to each child
+          children.forEach(child => {
+            const childEdgeX = child.x - side * (CW / 2 + 6)
+            connLayer.append('line')
+              .attr('x1', midX).attr('y1', child.y)
+              .attr('x2', childEdgeX).attr('y2', child.y)
+              .attr('stroke', CONN).attr('stroke-width', C_W)
+          })
         })
-      })
+      } else {
+        // Vertical connectors (default / horizontal layout)
+        byParent.forEach((children, parent) => {
+          const px = parent.x
+          const topY = parent.y + CH / 2 + 6
+          const botY = children[0].y - CH / 2 - 6
+          const midY = topY + (botY - topY) * 0.5
+
+          const path = d3.path()
+          path.moveTo(px, topY)
+          path.lineTo(px, midY)
+          connLayer.append('path').attr('d', path.toString())
+            .attr('fill', 'none').attr('stroke', CONN).attr('stroke-width', C_W)
+
+          if (children.length > 1) {
+            const minCX = Math.min(...children.map(c => c.x))
+            const maxCX = Math.max(...children.map(c => c.x))
+            connLayer.append('line')
+              .attr('x1', minCX).attr('y1', midY).attr('x2', maxCX).attr('y2', midY)
+              .attr('stroke', CONN).attr('stroke-width', C_W)
+          }
+
+          children.forEach(child => {
+            connLayer.append('line')
+              .attr('x1', child.x).attr('y1', midY).attr('x2', child.x).attr('y2', botY)
+              .attr('stroke', CONN).attr('stroke-width', C_W)
+          })
+        })
+      }
 
     // ── Palette helper ────────────────────────────────────────────────────
     function pal(p: ExtTreeNode) {
