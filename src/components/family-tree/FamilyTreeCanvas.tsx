@@ -12,6 +12,7 @@ interface FamilyTreeCanvasProps {
   onViewSubtree?: (node: TreeNode) => void
   language?:    'ar' | 'en'
   readOnly?:    boolean
+  layout?:      'vertical' | 'horizontal' | 'centeredClassic'
 }
 
 // ── Card dimensions (single consistent size) ────────────────────────────────
@@ -55,7 +56,13 @@ interface ExtTreeNode extends TreeNode {
 }
 
 export function FamilyTreeCanvas({
-  data, onNodeClick, onNodeAdd, onViewSubtree, language = 'ar', readOnly = false,
+  data,
+  onNodeClick,
+  onNodeAdd,
+  onViewSubtree,
+  language = 'ar',
+  readOnly = false,
+  layout = 'vertical',
 }: FamilyTreeCanvasProps) {
   const svgRef       = useRef<SVGSVGElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -87,12 +94,74 @@ export function FamilyTreeCanvas({
     f2.append('feDropShadow').attr('dx', 0).attr('dy', 3).attr('stdDeviation', 6).attr('flood-color', 'rgba(217,119,6,0.30)')
 
     // ── Hierarchy & layout ────────────────────────────────────────────────
-    const root = d3.hierarchy<ExtTreeNode>(filteredData as ExtTreeNode, d => d.children as ExtTreeNode[] | undefined)
-    d3.tree<ExtTreeNode>()
-      .nodeSize([NS_W, NS_H])
-      .separation((a, b) => a.parent === b.parent ? 1 : 1.2)(root)
+    const root = d3.hierarchy<ExtTreeNode>(
+      filteredData as ExtTreeNode,
+      d => d.children as ExtTreeNode[] | undefined,
+    )
 
-    const allNodes = root.descendants()
+    type HNode = d3.HierarchyPointNode<ExtTreeNode>
+
+    if (layout === 'vertical' || layout === 'horizontal') {
+      d3.tree<ExtTreeNode>()
+        .nodeSize([NS_W, NS_H])
+        .separation((a, b) => a.parent === b.parent ? 1 : 1.2)(root as any)
+
+      if (layout === 'horizontal') {
+        // Rotate layout: root on the left, branches to the right
+        (root as any).each((n: HNode) => {
+          const ox = n.x
+          n.x = n.y
+          n.y = ox
+        })
+      }
+    } else if (layout === 'centeredClassic') {
+      // Classic centered layout:
+      // - Root in the middle
+      // - Descendants spread symmetrically to left and right by generation
+      const levels = new Map<number, HNode[]>()
+      ;(root as any).each((n: HNode) => {
+        const d = n.depth || 0
+        if (!levels.has(d)) levels.set(d, [])
+        levels.get(d)!.push(n)
+      })
+
+      const baseYGap = NS_H * 0.9
+      const baseXGap = NS_W * 0.9
+
+      // Root at center
+      const rootNode = root as unknown as HNode
+      rootNode.x = 0
+      rootNode.y = 0
+
+      // For each generation, place nodes half to the left and half to the right
+      ;[...levels.entries()]
+        .filter(([d]) => d > 0)
+        .sort(([a], [b]) => a - b)
+        .forEach(([depth, nodes]) => {
+          const genOffset = depth * baseXGap
+          const sorted = nodes.slice().sort((a, b) => (a.data.name || '').localeCompare(b.data.name || ''))
+
+          const mid = Math.ceil(sorted.length / 2)
+          const left = sorted.slice(0, mid)
+          const right = sorted.slice(mid)
+
+          const placeSide = (items: HNode[], side: -1 | 1) => {
+            if (items.length === 0) return
+            const total = items.length
+            const span = (total - 1) * baseYGap
+            const startY = -span / 2
+            items.forEach((n, i) => {
+              n.x = side * genOffset
+              n.y = startY + i * baseYGap
+            })
+          }
+
+          placeSide(left, -1)
+          placeSide(right, 1)
+        })
+    }
+
+    const allNodes = (root as any).descendants() as HNode[]
     const xs = allNodes.map(n => n.x!)
     const ys = allNodes.map(n => n.y!)
     const treeW = (Math.max(...xs) - Math.min(...xs)) + NS_W
@@ -130,8 +199,6 @@ export function FamilyTreeCanvas({
     } else {
       svg.call(zoom.transform, transformRef.current)
     }
-
-    type HNode = d3.HierarchyPointNode<ExtTreeNode>
 
     // ── Connectors ────────────────────────────────────────────────────────
     const connLayer = g.append('g').attr('class', 'conn-layer')

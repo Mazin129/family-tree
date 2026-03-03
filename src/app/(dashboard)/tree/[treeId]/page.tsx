@@ -118,6 +118,9 @@ export default function TreeViewPage() {
     { id: 'ai'      as Tab, label: 'الذكاء',  icon: Sparkles  },
   ]
 
+  type LayoutStyle = 'vertical' | 'horizontal' | 'centeredClassic'
+  const [layoutStyle, setLayoutStyle] = useState<LayoutStyle>('vertical')
+
   return (
     <div className="flex flex-col h-[calc(100vh-64px)]" dir="rtl">
 
@@ -174,29 +177,44 @@ export default function TreeViewPage() {
         </div>
       </div>
 
-      {/* ━━ Row 2 – Tab bar ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+      {/* ━━ Row 2 – Tab bar + layout selector ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
       <div className="shrink-0 flex items-center gap-0.5 px-4 sm:px-6 py-2 bg-white border-b border-sand-100">
-        {TABS.map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
-              activeTab === tab.id
-                ? 'bg-khartoum-900 text-white shadow-sm'
-                : 'text-khartoum-500 hover:bg-sand-100 hover:text-khartoum-700'
-            }`}
+        <div className="flex items-center gap-0.5">
+          {TABS.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+                activeTab === tab.id
+                  ? 'bg-khartoum-900 text-white shadow-sm'
+                  : 'text-khartoum-500 hover:bg-sand-100 hover:text-khartoum-700'
+              }`}
+            >
+              <tab.icon className="w-4 h-4" />
+              {tab.label}
+              {tab.id === 'members' && members.length > 0 && (
+                <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${
+                  activeTab === 'members' ? 'bg-white/20 text-white' : 'bg-sand-200 text-khartoum-600'
+                }`}>
+                  {members.length}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        <div className="ml-auto flex items-center gap-2">
+          <span className="text-xs text-khartoum-400">نمط الشجرة</span>
+          <select
+            value={layoutStyle}
+            onChange={(e) => setLayoutStyle(e.target.value as LayoutStyle)}
+            className="text-xs border border-sand-200 rounded-lg px-2 py-1 bg-white text-khartoum-700 focus:outline-none focus:ring-1 focus:ring-khartoum-500"
           >
-            <tab.icon className="w-4 h-4" />
-            {tab.label}
-            {tab.id === 'members' && members.length > 0 && (
-              <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${
-                activeTab === 'members' ? 'bg-white/20 text-white' : 'bg-sand-200 text-khartoum-600'
-              }`}>
-                {members.length}
-              </span>
-            )}
-          </button>
-        ))}
+            <option value="vertical">عمودية</option>
+            <option value="horizontal">أفقية</option>
+            <option value="centeredClassic">مركزية كلاسيكية</option>
+          </select>
+        </div>
       </div>
 
       {/* ━━ Content ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
@@ -235,6 +253,7 @@ export default function TreeViewPage() {
                       onNodeAdd={handleNodeAdd}
                       onViewSubtree={handleViewSubtree}
                       language="ar"
+                      layout={layoutStyle}
                     />
                   </div>
                 </div>
