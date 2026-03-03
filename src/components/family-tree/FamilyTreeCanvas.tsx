@@ -192,11 +192,17 @@ export function FamilyTreeCanvas({
     }
 
     // ── Render card (always the same size — stable) ─────────────────────
-    function renderCard(el: SVGGElement, person: ExtTreeNode, isSel: boolean) {
+    function renderCard(
+      el: SVGGElement,
+      person: ExtTreeNode,
+      isSel: boolean,
+      opts?: { renderSpouses?: boolean },
+    ) {
       const g = d3.select(el)
       const c = pal(person)
       const name = getName(person)
       const ox = -CW / 2
+      const renderSpouses = opts?.renderSpouses ?? true
 
       g.append('rect')
         .attr('x', ox).attr('y', -CH / 2).attr('width', CW).attr('height', CH).attr('rx', CR)
@@ -245,14 +251,40 @@ export function FamilyTreeCanvas({
           .text(clip(meta.join(' · '), 20))
       }
 
-      const spouseCount = person.spouses?.length ?? 0
-      if (spouseCount > 0) {
-        const sp = person.spouses![0]
-        const spName = getName(sp)
-        g.append('text').attr('x', textX).attr('y', 30)
-          .attr('text-anchor', 'middle').attr('font-size', 9).attr('font-family', "'Cairo', sans-serif")
-          .attr('fill', '#92400e')
-          .text(`♥ ${clip(spName, 12)}${spouseCount > 1 ? ` (+${spouseCount - 1})` : ''}`)
+      // ── Spouse as separate linked card (to the right) ─────────────────────
+      if (renderSpouses && person.spouses && person.spouses.length > 0) {
+        const primaryRightX = CW / 2
+        const spouseCenterX = primaryRightX + SP_GAP + CW / 2
+
+        // Connector line between spouses
+        g.append('line')
+          .attr('x1', primaryRightX)
+          .attr('y1', 0)
+          .attr('x2', spouseCenterX - CW / 2 + 4)
+          .attr('y2', 0)
+          .attr('stroke', CONN)
+          .attr('stroke-width', C_W)
+
+        const spouse = person.spouses[0] as ExtTreeNode
+        const spouseG = g.append('g')
+          .attr('class', 'spouse-node')
+          .attr('transform', `translate(${spouseCenterX},0)`)
+          .style('cursor', 'pointer')
+
+        const spouseSelected = spouse.id === selectedId
+        renderCard(spouseG.node() as SVGGElement, spouse, spouseSelected, { renderSpouses: false })
+
+        // Interactions for spouse card
+        spouseG
+          .on('click', (ev) => {
+            ev.stopPropagation()
+            setSelectedId(spouse.id)
+            onNodeClick?.(spouse)
+          })
+          .on('dblclick', (ev) => {
+            ev.stopPropagation()
+            onViewSubtree?.(spouse)
+          })
       }
     }
 
