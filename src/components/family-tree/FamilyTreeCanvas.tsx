@@ -228,10 +228,11 @@ export function FamilyTreeCanvas({
           .attr('width', AVR * 2).attr('height', AVR * 2)
           .attr('clip-path', `url(#${cid})`).attr('preserveAspectRatio', 'xMidYMid slice')
       } else {
+        const glyph = person.gender === 'MALE' ? '♂' : '♀'
         g.append('text').attr('x', avCX).attr('y', avCY + 5)
-          .attr('text-anchor', 'middle').attr('font-size', 14).attr('font-weight', '700')
+          .attr('text-anchor', 'middle').attr('font-size', 16).attr('font-weight', '700')
           .attr('font-family', "'Cairo', sans-serif").attr('fill', c.accent)
-          .text((name || '؟').charAt(0))
+          .text(glyph)
       }
 
       // Center the main name text within the card
