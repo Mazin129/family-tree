@@ -45,11 +45,9 @@ const FEMALE_ACCENT = '#db2777'
 const FEMALE_AV_BG  = '#fbcfe8'
 const FEMALE_TEXT   = '#5b1a33'
 
-const DEAD_BG     = '#f1f5f9'
-const DEAD_BORDER = '#cbd5e1'
-const DEAD_ACCENT = '#94a3b8'
-const DEAD_AV_BG  = '#e2e8f0'
-const DEAD_TEXT   = '#334155'
+// When a person is deceased, keep the normal gender colours for the card,
+// but use a black accent strip (instead of blue/pink) to signal death.
+const DEAD_ACCENT = '#111827'
 
 interface ExtTreeNode extends TreeNode {
   _collapsed?: boolean
@@ -175,14 +173,14 @@ export function FamilyTreeCanvas({
     // ── Palette helper ────────────────────────────────────────────────────
     function pal(p: ExtTreeNode) {
       const m = p.gender === 'MALE'
-      const a = p.isAlive
-      return {
-        bg:     a ? (m ? MALE_BG     : FEMALE_BG)     : DEAD_BG,
-        border: a ? (m ? MALE_BORDER : FEMALE_BORDER)  : DEAD_BORDER,
-        accent: a ? (m ? MALE_ACCENT : FEMALE_ACCENT)  : DEAD_ACCENT,
-        avBg:   a ? (m ? MALE_AV_BG  : FEMALE_AV_BG)  : DEAD_AV_BG,
-        text:   a ? (m ? MALE_TEXT   : FEMALE_TEXT)    : DEAD_TEXT,
+      const base = {
+        bg:     m ? MALE_BG     : FEMALE_BG,
+        border: m ? MALE_BORDER : FEMALE_BORDER,
+        avBg:   m ? MALE_AV_BG  : FEMALE_AV_BG,
+        text:   m ? MALE_TEXT   : FEMALE_TEXT,
       }
+      const accent = p.isAlive ? (m ? MALE_ACCENT : FEMALE_ACCENT) : DEAD_ACCENT
+      return { ...base, accent }
     }
 
     function getName(p: ExtTreeNode) {
