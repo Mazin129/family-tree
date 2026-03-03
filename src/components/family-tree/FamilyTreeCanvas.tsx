@@ -78,164 +78,166 @@ export function FamilyTreeCanvas({
 
   const draw = useCallback(() => {
     if (!svgRef.current || !filteredData) return
-    const svg = d3.select(svgRef.current)
-    svg.selectAll('*').remove()
+    try {
+      const svg = d3.select(svgRef.current)
+      svg.selectAll('*').remove()
 
-    const W = svgRef.current.clientWidth  || 960
-    const H = svgRef.current.clientHeight || 640
+      const W = svgRef.current.clientWidth  || 960
+      const H = svgRef.current.clientHeight || 640
 
-    // ── Defs ──────────────────────────────────────────────────────────────
-    const defs = svg.append('defs')
-    const f1 = defs.append('filter').attr('id', 'card-shadow')
-      .attr('x', '-20%').attr('y', '-20%').attr('width', '140%').attr('height', '150%')
-    f1.append('feDropShadow').attr('dx', 0).attr('dy', 2).attr('stdDeviation', 4).attr('flood-color', 'rgba(0,0,0,0.10)')
-    const f2 = defs.append('filter').attr('id', 'card-shadow-sel')
-      .attr('x', '-20%').attr('y', '-20%').attr('width', '140%').attr('height', '150%')
-    f2.append('feDropShadow').attr('dx', 0).attr('dy', 3).attr('stdDeviation', 6).attr('flood-color', 'rgba(217,119,6,0.30)')
+      // ── Defs ──────────────────────────────────────────────────────────────
+      const defs = svg.append('defs')
+      const f1 = defs.append('filter').attr('id', 'card-shadow')
+        .attr('x', '-20%').attr('y', '-20%').attr('width', '140%').attr('height', '150%')
+      f1.append('feDropShadow').attr('dx', 0).attr('dy', 2).attr('stdDeviation', 4).attr('flood-color', 'rgba(0,0,0,0.10)')
+      const f2 = defs.append('filter').attr('id', 'card-shadow-sel')
+        .attr('x', '-20%').attr('y', '-20%').attr('width', '140%').attr('height', '150%')
+      f2.append('feDropShadow').attr('dx', 0).attr('dy', 3).attr('stdDeviation', 6).attr('flood-color', 'rgba(217,119,6,0.30)')
 
-    // ── Hierarchy & layout ────────────────────────────────────────────────
-    const root = d3.hierarchy<ExtTreeNode>(
-      filteredData as ExtTreeNode,
-      d => d.children as ExtTreeNode[] | undefined,
-    )
+      // ── Hierarchy & layout ────────────────────────────────────────────────
+      const root = d3.hierarchy<ExtTreeNode>(
+        filteredData as ExtTreeNode,
+        d => d.children as ExtTreeNode[] | undefined,
+      )
 
-    type HNode = d3.HierarchyPointNode<ExtTreeNode>
+      type HNode = d3.HierarchyPointNode<ExtTreeNode>
 
-    if (layout === 'vertical' || layout === 'horizontal') {
-      d3.tree<ExtTreeNode>()
-        .nodeSize([NS_W, NS_H])
-        .separation((a, b) => a.parent === b.parent ? 1 : 1.2)(root as any)
-
-      if (layout === 'horizontal') {
-        // Rotate layout: root on the left, branches to the right
-        (root as any).each((n: HNode) => {
-          const ox = n.x
-          n.x = n.y
-          n.y = ox
+      if (layout === 'centeredClassic') {
+        // Classic centered layout:
+        // - Root in the middle
+        // - Descendants spread symmetrically to left and right by generation
+        const levels = new Map<number, HNode[]>()
+        ;(root as any).each((n: HNode) => {
+          const d = n.depth || 0
+          if (!levels.has(d)) levels.set(d, [])
+          levels.get(d)!.push(n)
         })
-      }
-    } else if (layout === 'centeredClassic') {
-      // Classic centered layout:
-      // - Root in the middle
-      // - Descendants spread symmetrically to left and right by generation
-      const levels = new Map<number, HNode[]>()
-      ;(root as any).each((n: HNode) => {
-        const d = n.depth || 0
-        if (!levels.has(d)) levels.set(d, [])
-        levels.get(d)!.push(n)
-      })
 
-      const baseYGap = NS_H * 0.9
-      const baseXGap = NS_W * 0.9
+        const baseYGap = NS_H * 0.9
+        const baseXGap = NS_W * 0.9
 
-      // Root at center
-      const rootNode = root as unknown as HNode
-      rootNode.x = 0
-      rootNode.y = 0
+        // Root at center
+        const rootNode = root as unknown as HNode
+        rootNode.x = 0
+        rootNode.y = 0
 
-      // For each generation, place nodes half to the left and half to the right
-      ;[...levels.entries()]
-        .filter(([d]) => d > 0)
-        .sort(([a], [b]) => a - b)
-        .forEach(([depth, nodes]) => {
-          const genOffset = depth * baseXGap
-          const sorted = nodes.slice().sort((a, b) => (a.data.name || '').localeCompare(b.data.name || ''))
+        // For each generation, place nodes half to the left and half to the right
+        ;[...levels.entries()]
+          .filter(([d]) => d > 0)
+          .sort(([a], [b]) => a - b)
+          .forEach(([depth, nodes]) => {
+            const genOffset = depth * baseXGap
+            const sorted = nodes.slice().sort((a, b) => (a.data.name || '').localeCompare(b.data.name || ''))
 
-          const mid = Math.ceil(sorted.length / 2)
-          const left = sorted.slice(0, mid)
-          const right = sorted.slice(mid)
+            const mid = Math.ceil(sorted.length / 2)
+            const left = sorted.slice(0, mid)
+            const right = sorted.slice(mid)
 
-          const placeSide = (items: HNode[], side: -1 | 1) => {
-            if (items.length === 0) return
-            const total = items.length
-            const span = (total - 1) * baseYGap
-            const startY = -span / 2
-            items.forEach((n, i) => {
-              n.x = side * genOffset
-              n.y = startY + i * baseYGap
-            })
-          }
+            const placeSide = (items: HNode[], side: -1 | 1) => {
+              if (items.length === 0) return
+              const total = items.length
+              const span = (total - 1) * baseYGap
+              const startY = -span / 2
+              items.forEach((n, i) => {
+                n.x = side * genOffset
+                n.y = startY + i * baseYGap
+              })
+            }
 
-          placeSide(left, -1)
-          placeSide(right, 1)
-        })
-    }
+            placeSide(left, -1)
+            placeSide(right, 1)
+          })
+      } else {
+        // Original vertical layout (also used as base for horizontal)
+        d3.tree<ExtTreeNode>()
+          .nodeSize([NS_W, NS_H])
+          .separation((a, b) => a.parent === b.parent ? 1 : 1.2)(root)
 
-    const allNodes = (root as any).descendants() as HNode[]
-    const xs = allNodes.map(n => n.x!)
-    const ys = allNodes.map(n => n.y!)
-    const treeW = (Math.max(...xs) - Math.min(...xs)) + NS_W
-    const treeH = (Math.max(...ys) - Math.min(...ys)) + NS_H
-
-    // ── Root group (zoom transforms this, not individual nodes) ──────────
-    const g = svg.append('g')
-    gRef.current = g.node()
-
-    // ── Zoom (only transforms the group — never redraws) ────────────────
-    const zoom = d3.zoom<SVGSVGElement, unknown>()
-      .scaleExtent([0.02, 5])
-      .on('zoom', (e) => {
-        g.attr('transform', e.transform.toString())
-        transformRef.current = e.transform
-        setZoomLevel(Math.round(e.transform.k * 100))
-      })
-    zoomRef.current = zoom
-    svg.call(zoom)
-
-    if (!initialFitDone.current) {
-      const padX = 80, padY = 60
-      const scaleX = W / (treeW + padX * 2)
-      const scaleY = H / (treeH + padY * 2)
-      const scale = Math.max(Math.min(scaleX, scaleY, 1.2), 0.35)
-      const rootX = allNodes[0].x!
-      const rootY = allNodes[0].y!
-      const initT = d3.zoomIdentity
-        .translate(W / 2, padY + 40)
-        .scale(scale)
-        .translate(-rootX, -rootY)
-      svg.call(zoom.transform, initT)
-      transformRef.current = initT
-      initialFitDone.current = true
-    } else {
-      svg.call(zoom.transform, transformRef.current)
-    }
-
-    // ── Connectors ────────────────────────────────────────────────────────
-    const connLayer = g.append('g').attr('class', 'conn-layer')
-    const byParent = new Map<HNode, HNode[]>()
-    root.links().forEach(({ source, target }) => {
-      const s = source as HNode
-      const t = target as HNode
-      if (!byParent.has(s)) byParent.set(s, [])
-      byParent.get(s)!.push(t)
-    })
-
-    byParent.forEach((children, parent) => {
-      const px = parent.x
-      const topY = parent.y + CH / 2 + 6
-      const botY = children[0].y - CH / 2 - 6
-      const midY = topY + (botY - topY) * 0.5
-
-      const path = d3.path()
-      path.moveTo(px, topY)
-      path.lineTo(px, midY)
-      connLayer.append('path').attr('d', path.toString())
-        .attr('fill', 'none').attr('stroke', CONN).attr('stroke-width', C_W)
-
-      if (children.length > 1) {
-        const minCX = Math.min(...children.map(c => c.x))
-        const maxCX = Math.max(...children.map(c => c.x))
-        connLayer.append('line')
-          .attr('x1', minCX).attr('y1', midY).attr('x2', maxCX).attr('y2', midY)
-          .attr('stroke', CONN).attr('stroke-width', C_W)
+        if (layout === 'horizontal') {
+          // Rotate layout: root on the left, branches to the right
+          (root as any).each((n: HNode) => {
+            const ox = n.x
+            n.x = n.y
+            n.y = ox
+          })
+        }
       }
 
-      children.forEach(child => {
-        connLayer.append('line')
-          .attr('x1', child.x).attr('y1', midY).attr('x2', child.x).attr('y2', botY)
-          .attr('stroke', CONN).attr('stroke-width', C_W)
+      const allNodes = root.descendants() as HNode[]
+      const xs = allNodes.map(n => n.x!)
+      const ys = allNodes.map(n => n.y!)
+      const treeW = (Math.max(...xs) - Math.min(...xs)) + NS_W
+      const treeH = (Math.max(...ys) - Math.min(...ys)) + NS_H
+
+      // ── Root group (zoom transforms this, not individual nodes) ──────────
+      const g = svg.append('g')
+      gRef.current = g.node()
+
+      // ── Zoom (only transforms the group — never redraws) ────────────────
+      const zoom = d3.zoom<SVGSVGElement, unknown>()
+        .scaleExtent([0.02, 5])
+        .on('zoom', (e) => {
+          g.attr('transform', e.transform.toString())
+          transformRef.current = e.transform
+          setZoomLevel(Math.round(e.transform.k * 100))
+        })
+      zoomRef.current = zoom
+      svg.call(zoom)
+
+      if (!initialFitDone.current) {
+        const padX = 80, padY = 60
+        const scaleX = W / (treeW + padX * 2)
+        const scaleY = H / (treeH + padY * 2)
+        const scale = Math.max(Math.min(scaleX, scaleY, 1.2), 0.35)
+        const rootX = allNodes[0].x!
+        const rootY = allNodes[0].y!
+        const initT = d3.zoomIdentity
+          .translate(W / 2, padY + 40)
+          .scale(scale)
+          .translate(-rootX, -rootY)
+        svg.call(zoom.transform, initT)
+        transformRef.current = initT
+        initialFitDone.current = true
+      } else {
+        svg.call(zoom.transform, transformRef.current)
+      }
+
+      // ── Connectors ────────────────────────────────────────────────────────
+      const connLayer = g.append('g').attr('class', 'conn-layer')
+      const byParent = new Map<HNode, HNode[]>()
+      root.links().forEach(({ source, target }) => {
+        const s = source as HNode
+        const t = target as HNode
+        if (!byParent.has(s)) byParent.set(s, [])
+        byParent.get(s)!.push(t)
       })
-    })
+
+      byParent.forEach((children, parent) => {
+        const px = parent.x
+        const topY = parent.y + CH / 2 + 6
+        const botY = children[0].y - CH / 2 - 6
+        const midY = topY + (botY - topY) * 0.5
+
+        const path = d3.path()
+        path.moveTo(px, topY)
+        path.lineTo(px, midY)
+        connLayer.append('path').attr('d', path.toString())
+          .attr('fill', 'none').attr('stroke', CONN).attr('stroke-width', C_W)
+
+        if (children.length > 1) {
+          const minCX = Math.min(...children.map(c => c.x))
+          const maxCX = Math.max(...children.map(c => c.x))
+          connLayer.append('line')
+            .attr('x1', minCX).attr('y1', midY).attr('x2', maxCX).attr('y2', midY)
+            .attr('stroke', CONN).attr('stroke-width', C_W)
+        }
+
+        children.forEach(child => {
+          connLayer.append('line')
+            .attr('x1', child.x).attr('y1', midY).attr('x2', child.x).attr('y2', botY)
+            .attr('stroke', CONN).attr('stroke-width', C_W)
+        })
+      })
 
     // ── Palette helper ────────────────────────────────────────────────────
     function pal(p: ExtTreeNode) {
@@ -392,49 +394,55 @@ export function FamilyTreeCanvas({
       .attr('transform', d => `translate(${d.x},${d.y})`)
       .style('cursor', 'pointer')
 
-    nodeGs.each(function(d) {
-      const person = d.data
-      const isSel = person.id === selectedId
-      renderCard(this, person, isSel)
+      nodeGs.each(function(d) {
+        const person = d.data
+        const isSel = person.id === selectedId
+        renderCard(this, person, isSel)
 
-      const hasKids = (person.children && person.children.length > 0)
+        const hasKids = (person.children && person.children.length > 0)
 
-      // ── Add button ────────────────────────────────────────────────────
-      if (!readOnly) {
-        const addBtnY = CH / 2 + (hasKids ? 28 : 8)
-        const addBtn = d3.select(this).append('g')
-          .attr('class', 'add-btn')
-          .attr('transform', `translate(0,${addBtnY})`)
-          .style('opacity', 0).style('cursor', 'pointer')
-          .on('click', (ev) => { ev.stopPropagation(); onNodeAdd?.(person) })
+        // ── Add button ────────────────────────────────────────────────────
+        if (!readOnly) {
+          const addBtnY = CH / 2 + (hasKids ? 28 : 8)
+          const addBtn = d3.select(this).append('g')
+            .attr('class', 'add-btn')
+            .attr('transform', `translate(0,${addBtnY})`)
+            .style('opacity', 0).style('cursor', 'pointer')
+            .on('click', (ev) => { ev.stopPropagation(); onNodeAdd?.(person) })
 
-        addBtn.append('circle').attr('r', 12)
-          .attr('fill', '#d4922d').attr('stroke', 'white').attr('stroke-width', 2)
-        addBtn.append('text').attr('text-anchor', 'middle').attr('y', 5)
-          .attr('font-size', 16).attr('font-weight', '700').attr('fill', 'white').text('+')
-      }
-    })
-
-    // ── Hover / click ─────────────────────────────────────────────────────
-    nodeGs
-      .on('mouseenter', function() {
-        d3.select(this).select('.add-btn').transition().duration(150).style('opacity', 1)
-      })
-      .on('mouseleave', function() {
-        d3.select(this).select('.add-btn').transition().duration(150).style('opacity', 0)
-      })
-      .on('click', (ev, d) => {
-        ev.stopPropagation()
-        setSelectedId(d.data.id)
-        onNodeClick?.(d.data)
-      })
-      .on('dblclick', (ev, d) => {
-        ev.stopPropagation()
-        onViewSubtree?.(d.data)
+          addBtn.append('circle').attr('r', 12)
+            .attr('fill', '#d4922d').attr('stroke', 'white').attr('stroke-width', 2)
+          addBtn.append('text').attr('text-anchor', 'middle').attr('y', 5)
+            .attr('font-size', 16).attr('font-weight', '700').attr('fill', 'white').text('+')
+        }
       })
 
-    svg.on('click', () => { setSelectedId(null) })
-  }, [filteredData, selectedId, language, readOnly, onNodeClick, onNodeAdd, onViewSubtree])
+      // ── Hover / click ─────────────────────────────────────────────────────
+      nodeGs
+        .on('mouseenter', function() {
+          d3.select(this).select('.add-btn').transition().duration(150).style('opacity', 1)
+        })
+        .on('mouseleave', function() {
+          d3.select(this).select('.add-btn').transition().duration(150).style('opacity', 0)
+        })
+        .on('click', (ev, d) => {
+          ev.stopPropagation()
+          setSelectedId(d.data.id)
+          onNodeClick?.(d.data)
+        })
+        .on('dblclick', (ev, d) => {
+          ev.stopPropagation()
+          onViewSubtree?.(d.data)
+        })
+
+      svg.on('click', () => { setSelectedId(null) })
+    } catch (err) {
+      // Prevent D3 runtime errors from tearing down the whole dashboard
+      // and surface them only in the console instead.
+      // eslint-disable-next-line no-console
+      console.error('[FamilyTreeCanvas] draw error', err)
+    }
+  }, [filteredData, selectedId, language, readOnly, onNodeClick, onNodeAdd, onViewSubtree, layout])
 
   useEffect(() => { draw() }, [draw])
 
