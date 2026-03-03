@@ -20,6 +20,7 @@ import type { TreeNode, TreeMember, FamilyTree } from '@/types'
 import Link from 'next/link'
 
 type Tab = 'tree' | 'members' | 'ai'
+type LayoutStyle = 'vertical' | 'horizontal' | 'centeredClassic'
 
 export default function TreeViewPage() {
   const params = useParams()
@@ -38,6 +39,7 @@ export default function TreeViewPage() {
   const [activeTab,      setActiveTab]      = useState<Tab>('tree')
   const [subtreeRoot,    setSubtreeRoot]    = useState<TreeNode | null>(null)
   const [loading,        setLoading]        = useState(true)
+  const [layoutStyle,    setLayoutStyle]    = useState<LayoutStyle>('vertical')
 
   const fetchTree = useCallback(async () => {
     try {
@@ -117,9 +119,6 @@ export default function TreeViewPage() {
     { id: 'members' as Tab, label: 'الأفراد', icon: Users     },
     { id: 'ai'      as Tab, label: 'الذكاء',  icon: Sparkles  },
   ]
-
-  type LayoutStyle = 'vertical' | 'horizontal' | 'centeredClassic'
-  const [layoutStyle, setLayoutStyle] = useState<LayoutStyle>('vertical')
 
   return (
     <div className="flex flex-col h-[calc(100vh-64px)]" dir="rtl">
