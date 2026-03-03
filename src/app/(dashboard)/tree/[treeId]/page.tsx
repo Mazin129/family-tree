@@ -20,7 +20,7 @@ import type { TreeNode, TreeMember, FamilyTree } from '@/types'
 import Link from 'next/link'
 
 type Tab = 'tree' | 'members' | 'ai'
-type LayoutStyle = 'vertical' | 'horizontal' | 'centeredClassic'
+type LayoutStyle = 'vertical' | 'centeredClassic'
 
 export default function TreeViewPage() {
   const params = useParams()
@@ -39,7 +39,7 @@ export default function TreeViewPage() {
   const [activeTab,      setActiveTab]      = useState<Tab>('tree')
   const [subtreeRoot,    setSubtreeRoot]    = useState<TreeNode | null>(null)
   const [loading,        setLoading]        = useState(true)
-  const [layoutStyle,    setLayoutStyle]    = useState<LayoutStyle>('vertical')
+  const [layoutStyle,    setLayoutStyle]    = useState<LayoutStyle>('centeredClassic')
 
   const fetchTree = useCallback(async () => {
     try {
@@ -209,9 +209,8 @@ export default function TreeViewPage() {
             onChange={(e) => setLayoutStyle(e.target.value as LayoutStyle)}
             className="text-xs border border-sand-200 rounded-lg px-2 py-1 bg-white text-khartoum-700 focus:outline-none focus:ring-1 focus:ring-khartoum-500"
           >
-            <option value="vertical">عمودية</option>
-            <option value="horizontal">أفقية</option>
             <option value="centeredClassic">مركزية كلاسيكية</option>
+            <option value="vertical">عمودية</option>
           </select>
         </div>
       </div>
