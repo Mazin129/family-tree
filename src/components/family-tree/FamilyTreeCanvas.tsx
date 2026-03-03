@@ -228,11 +228,40 @@ export function FamilyTreeCanvas({
           .attr('width', AVR * 2).attr('height', AVR * 2)
           .attr('clip-path', `url(#${cid})`).attr('preserveAspectRatio', 'xMidYMid slice')
       } else {
-        const glyph = person.gender === 'MALE' ? '♂' : '♀'
-        g.append('text').attr('x', avCX).attr('y', avCY + 5)
-          .attr('text-anchor', 'middle').attr('font-size', 16).attr('font-weight', '700')
-          .attr('font-family', "'Cairo', sans-serif").attr('fill', c.accent)
-          .text(glyph)
+        // Gender-specific silhouette avatar inside the circle (MyHeritage-style)
+        const headR = AVR * 0.55
+        const headCY = avCY - 4
+        const bodyTop = headCY + headR * 0.4
+        const bodyHeight = AVR * 1.4
+        const bodyWidth = AVR * 1.6
+        const bodyX = avCX - bodyWidth / 2
+
+        // Body (torso / shoulders)
+        g.append('rect')
+          .attr('x', bodyX)
+          .attr('y', bodyTop)
+          .attr('width', bodyWidth)
+          .attr('height', bodyHeight)
+          .attr('rx', AVR * 0.5)
+          .attr('fill', c.accent)
+          .attr('opacity', 0.18)
+
+        // Outer head
+        g.append('circle')
+          .attr('cx', avCX)
+          .attr('cy', headCY)
+          .attr('r', headR)
+          .attr('fill', '#f9fafb')
+          .attr('stroke', c.border)
+          .attr('stroke-width', 0.8)
+
+        // Inner face color hint (slightly different per gender)
+        g.append('circle')
+          .attr('cx', avCX)
+          .attr('cy', headCY + 1)
+          .attr('r', headR * 0.65)
+          .attr('fill', person.gender === 'MALE' ? '#dbeafe' : '#fce7f3')
+          .attr('opacity', 0.95)
       }
 
       // Center the main name text within the card
