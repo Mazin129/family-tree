@@ -152,11 +152,12 @@ export function FamilyTreeCanvas({
           ancestorChain[i].y = -(ancestorChain.length - i) * V_CHAIN_GAP
         }
 
-        // Split branching node's direct children: first half LEFT, rest RIGHT
+        // Split branching node's direct children: second half LEFT, first half RIGHT
+        // (older sons go right, younger sons go left — matching RTL heritage style)
         const directChildren = (branchNode.children || []) as HNode[]
-        const mid = Math.ceil(directChildren.length / 2)
-        const leftChildren  = directChildren.slice(0, mid)
-        const rightChildren = directChildren.slice(mid)
+        const mid = Math.floor(directChildren.length / 2)
+        const rightChildren = directChildren.slice(0, mid)
+        const leftChildren  = directChildren.slice(mid)
 
         // Recursively lay out a subtree expanding horizontally.
         // side = -1 for left, +1 for right.
