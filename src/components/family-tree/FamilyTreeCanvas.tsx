@@ -467,24 +467,25 @@ export function FamilyTreeCanvas({
           .text(clip(meta.join(' · '), 20))
       }
 
-      // ── Spouse as separate linked card (to the right) ─────────────────────
+      // ── Spouse as separate linked card (positioned below) ─────────────────
       if (renderSpouses && person.spouses && person.spouses.length > 0) {
-        const primaryRightX = CW / 2
-        const spouseCenterX = primaryRightX + SP_GAP + CW / 2
+        // Place spouse card directly under the main person card
+        const spouseOffsetY = CH / 2 + 24
+        const spouseCenterX = 0
 
-        // Connector line between spouses
+        // Connector line from bottom of main card to top of spouse card
         g.append('line')
-          .attr('x1', primaryRightX)
-          .attr('y1', 0)
-          .attr('x2', spouseCenterX - CW / 2 + 4)
-          .attr('y2', 0)
+          .attr('x1', spouseCenterX)
+          .attr('y1', CH / 2)
+          .attr('x2', spouseCenterX)
+          .attr('y2', spouseOffsetY - CH / 2)
           .attr('stroke', CONN)
           .attr('stroke-width', C_W)
 
         const spouse = person.spouses[0] as ExtTreeNode
         const spouseG = g.append('g')
           .attr('class', 'spouse-node')
-          .attr('transform', `translate(${spouseCenterX},0)`)
+          .attr('transform', `translate(${spouseCenterX},${spouseOffsetY})`)
           .style('cursor', 'pointer')
 
         const spouseSelected = spouse.id === selectedId
