@@ -467,42 +467,11 @@ export function FamilyTreeCanvas({
           .text(clip(meta.join(' · '), 20))
       }
 
-      // ── Spouse as separate linked card (positioned below, with connector) ─
+      // ── Spouse as separate linked card (positioned below with extra space) ─
       if (renderSpouses && person.spouses && person.spouses.length > 0) {
-        // Place spouse card directly under the main person card
-        const spouseOffsetY = CH / 2 + 24
+        // Place spouse card slightly below the main person card with a clear gap
+        const spouseOffsetY = CH + 20
         const spouseCenterX = 0
-
-        // Draw a vertical connector on the left side linking both cards,
-        // plus short horizontal stubs into each card (like a marriage line).
-        const leftX = -CW / 2 - 10
-
-        // Vertical line between person and spouse
-        g.append('line')
-          .attr('x1', leftX)
-          .attr('y1', 0)
-          .attr('x2', leftX)
-          .attr('y2', spouseOffsetY)
-          .attr('stroke', CONN)
-          .attr('stroke-width', C_W)
-
-        // Horizontal into main card
-        g.append('line')
-          .attr('x1', leftX)
-          .attr('y1', 0)
-          .attr('x2', -CW / 2)
-          .attr('y2', 0)
-          .attr('stroke', CONN)
-          .attr('stroke-width', C_W)
-
-        // Horizontal into spouse card
-        g.append('line')
-          .attr('x1', leftX)
-          .attr('y1', spouseOffsetY)
-          .attr('x2', -CW / 2)
-          .attr('y2', spouseOffsetY)
-          .attr('stroke', CONN)
-          .attr('stroke-width', C_W)
 
         const spouse = person.spouses[0] as ExtTreeNode
         const spouseG = g.append('g')
