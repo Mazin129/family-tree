@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import { Toaster } from 'sonner'
 import './globals.css'
 import { Providers } from './providers'
+import Script from 'next/script' // <-- GA import
 
 export const metadata: Metadata = {
   title: {
@@ -38,6 +39,23 @@ export default function RootLayout({
   return (
     <html lang="ar" dir="rtl" suppressHydrationWarning suppressContentEditableWarning>
       <head>
+        {/* Google Analytics 4 */}
+        <Script
+          src="https://www.googletagmanager.com/gtag/js?id=G-1MDXYEMBTF"
+          strategy="afterInteractive"
+        />
+        <Script id="ga-init" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', 'G-1MDXYEMBTF', {
+              page_path: window.location.pathname,
+            });
+          `}
+        </Script>
+
+        {/* Fonts */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
