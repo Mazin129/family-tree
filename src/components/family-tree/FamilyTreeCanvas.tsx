@@ -467,10 +467,10 @@ export function FamilyTreeCanvas({
           .text(clip(meta.join(' · '), 20))
       }
 
-      // ── Spouse as separate linked card (positioned below with extra space) ─
+      // ── Spouse as separate linked card (slightly below main card) ──────────
       if (renderSpouses && person.spouses && person.spouses.length > 0) {
-        // Place spouse card slightly below the main person card with a clear gap
-        const spouseOffsetY = CH + 20
+        // Small vertical offset so cards are readable but still within same generation band
+        const spouseOffsetY = CH / 2 + 10
         const spouseCenterX = 0
 
         const spouse = person.spouses[0] as ExtTreeNode
