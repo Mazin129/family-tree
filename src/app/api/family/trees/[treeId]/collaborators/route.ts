@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
+import crypto from 'crypto'
 import { authOptions } from '@/lib/auth/auth-options'
 import { prisma } from '@/lib/db/prisma'
 
@@ -59,12 +60,16 @@ export async function POST(
   const expiresAt = new Date()
   expiresAt.setDate(expiresAt.getDate() + Number(daysValid))
 
+  // Use a cryptographically-strong random token instead of relying on the DB default.
+  const token = crypto.randomBytes(32).toString('hex')
+
   const invite = await prisma.inviteToken.create({
     data: {
       treeId,
       createdById: userId,
       role,
       expiresAt,
+      token,
     },
   })
 

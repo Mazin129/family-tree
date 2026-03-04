@@ -31,6 +31,37 @@ export const GOOGLE_OAUTH_ENABLED = googleConfigured
 const THIRTY_DAYS_SECONDS = 30 * 24 * 60 * 60
 const ONE_DAY_SECONDS = 24 * 60 * 60
 
+// Simple in-memory rate limiter for credentials login
+type LoginAttemptInfo = { count: number; firstAttemptMs: number }
+const loginAttempts = new Map<string, LoginAttemptInfo>()
+const MAX_LOGIN_ATTEMPTS = 5
+const LOGIN_WINDOW_MS = 15 * 60 * 1000 // 15 minutes
+
+function canAttemptLogin(key: string) {
+  const now = Date.now()
+  const entry = loginAttempts.get(key)
+  if (!entry) return true
+  if (now - entry.firstAttemptMs > LOGIN_WINDOW_MS) {
+    loginAttempts.delete(key)
+    return true
+  }
+  return entry.count < MAX_LOGIN_ATTEMPTS
+}
+
+function recordFailedLogin(key: string) {
+  const now = Date.now()
+  const entry = loginAttempts.get(key)
+  if (!entry || now - entry.firstAttemptMs > LOGIN_WINDOW_MS) {
+    loginAttempts.set(key, { count: 1, firstAttemptMs: now })
+  } else {
+    loginAttempts.set(key, { count: entry.count + 1, firstAttemptMs: entry.firstAttemptMs })
+  }
+}
+
+function clearLoginAttempts(key: string) {
+  loginAttempts.delete(key)
+}
+
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma) as any,
   session: {
@@ -95,15 +126,31 @@ export const authOptions: NextAuthOptions = {
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null
 
+        const email = credentials.email.toLowerCase().trim()
+
+        const key = email
+        if (!canAttemptLogin(key)) {
+          // Too many attempts in the last window; deny without revealing which check failed
+          throw new Error('Too many login attempts. Please try again later.')
+        }
+
         const user = await prisma.user.findUnique({
-          where: { email: credentials.email },
+          where: { email },
           include: { profile: true },
         })
 
-        if (!user?.password) return null
+        if (!user?.password) {
+          recordFailedLogin(key)
+          return null
+        }
 
         const isValid = await bcrypt.compare(credentials.password, user.password)
-        if (!isValid) return null
+        if (!isValid) {
+          recordFailedLogin(key)
+          return null
+        }
+
+        clearLoginAttempts(key)
 
         if (!user.isActive) throw new Error('Account is deactivated')
 
