@@ -24,7 +24,8 @@ const AVR = 18
 // ── Spacing ──────────────────────────────────────────────────────────────────
 const SP_GAP = 16
 const H_GAP  = 40
-const V_STR  = 120
+// Increase vertical stride so stacked spouse cards have room
+const V_STR  = 180
 
 const NS_W = CW * 2 + SP_GAP + H_GAP
 const NS_H = V_STR
