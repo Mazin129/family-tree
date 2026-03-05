@@ -243,7 +243,58 @@ async function buildFlatVisualization(treeId: string) {
       gender: m.gender, birthYear: m.birthYear, deathYear: m.deathYear,
       isAlive: m.isAlive, photo: m.photo, tribe: m.tribe,
       privacyLevel: m.privacyLevel, postgresId: m.id,
-      children: [], spouses: [],
+      children: [], spouses: [], parents: [], siblings: [],
+    }
+  }
+
+  // Recursively climb the ancestor chain: each parent includes their own
+  // parents, spouses, and siblings — so the full lineage is available.
+  function toAncestorNode(id: string, excludeChildId: string, seen = new Set<string>()): object | null {
+    if (seen.has(id)) return null
+    seen.add(id)
+    const m = memberById.get(id)
+    if (!m) return null
+
+    const myParentIds = (parentOfMap.get(id) ?? []).filter(pid => !seen.has(pid))
+    const myParents = myParentIds
+      .map(pid => toAncestorNode(pid, id, new Set(seen)))
+      .filter(Boolean)
+
+    const mySpouseIds = (spouseMap.get(id) ?? [])
+      .filter(sid => sid !== excludeChildId && !seen.has(sid))
+    const mySpouses = mySpouseIds.map(sid => {
+      const sm = memberById.get(sid)
+      if (!sm) return null
+      const spSeen = new Set(seen)
+      spSeen.add(sid)
+      const spParentIds = (parentOfMap.get(sid) ?? []).filter(pid => !spSeen.has(pid))
+      const spParents = spParentIds
+        .map(pid => toAncestorNode(pid, sid, new Set(spSeen)))
+        .filter(Boolean)
+      return {
+        id: sm.id, name: sm.fullName, nameArabic: sm.fullNameArabic,
+        gender: sm.gender, birthYear: sm.birthYear, deathYear: sm.deathYear,
+        isAlive: sm.isAlive, photo: sm.photo, tribe: sm.tribe,
+        privacyLevel: sm.privacyLevel, postgresId: sm.id,
+        children: [], spouses: [], parents: spParents, siblings: [],
+      }
+    }).filter(Boolean)
+
+    const siblingIds = new Set<string>()
+    for (const pid of parentOfMap.get(id) ?? []) {
+      for (const kid of childMap.get(pid) ?? []) {
+        if (kid !== id && kid !== excludeChildId) siblingIds.add(kid)
+      }
+    }
+    const siblingNodes = [...siblingIds].map(sId => toFlatNode(sId)).filter(Boolean)
+
+    return {
+      id: m.id, name: m.fullName, nameArabic: m.fullNameArabic,
+      gender: m.gender, birthYear: m.birthYear, deathYear: m.deathYear,
+      isAlive: m.isAlive, photo: m.photo, tribe: m.tribe,
+      privacyLevel: m.privacyLevel, postgresId: m.id,
+      children: [], spouses: mySpouses,
+      parents: myParents, siblings: siblingNodes,
     }
   }
 
@@ -260,23 +311,13 @@ async function buildFlatVisualization(treeId: string) {
       const sNode = toNode(sid, new Set(visited)) as Record<string, unknown> | null
       if (!sNode) return null
 
-      // Enrich spouse with their own parents & siblings from the relationship data
-      const spouseParentIds = parentOfMap.get(sid) ?? []
-      const parentNodes: object[] = []
-      for (const pid of spouseParentIds) {
-        if (pid === id) continue
-        const pNode = toFlatNode(pid)
-        if (!pNode) continue
-        const pSpouseIds = spouseMap.get(pid) ?? []
-        ;(pNode as any).spouses = pSpouseIds
-          .filter(psid => psid !== sid && psid !== id)
-          .map(psid => toFlatNode(psid))
-          .filter(Boolean)
-        parentNodes.push(pNode)
-      }
+      const spouseParentIds = (parentOfMap.get(sid) ?? []).filter(pid => pid !== id)
+      const parentNodes = spouseParentIds
+        .map(pid => toAncestorNode(pid, sid))
+        .filter(Boolean)
 
       const siblingIds = new Set<string>()
-      for (const pid of spouseParentIds) {
+      for (const pid of parentOfMap.get(sid) ?? []) {
         for (const kid of childMap.get(pid) ?? []) {
           if (kid !== sid) siblingIds.add(kid)
         }

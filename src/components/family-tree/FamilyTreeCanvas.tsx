@@ -380,6 +380,109 @@ export function FamilyTreeCanvas({
       return raw || ''
     }
 
+    // ── Recursive ancestor chain renderer ──────────────────────────────
+    // Draws parents to the right, then their parents further right, etc.
+    // Each generation: parent cards (+ spouse) stacked vertically, siblings below,
+    // then recurse for grandparents.
+    const GEN_X_STEP = CW + 60
+
+    function renderAncestorChain(
+      container: d3.Selection<SVGGElement, unknown, null, undefined>,
+      ancestors: ExtTreeNode[],
+      siblings: ExtTreeNode[],
+      originX: number,
+      originY: number,
+    ) {
+      if (ancestors.length === 0 && siblings.length === 0) return
+
+      const cardCenterX = originX + GEN_X_STEP / 2 + CW / 2
+
+      // Collect parent cards including their spouses (father + mother pair)
+      const allCards: ExtTreeNode[] = []
+      for (const p of ancestors) {
+        allCards.push(p)
+        for (const ps of (p.spouses ?? []) as ExtTreeNode[]) {
+          if (!allCards.some(x => x.id === ps.id)) allCards.push(ps)
+        }
+      }
+
+      // Horizontal connector from origin to the first generation
+      container.append('line')
+        .attr('x1', originX).attr('y1', originY)
+        .attr('x2', cardCenterX - CW / 2 - 6).attr('y2', originY)
+        .attr('stroke', CONN).attr('stroke-width', C_W)
+
+      // Stack parent cards vertically, centred around originY
+      let yPos = originY - ((allCards.length - 1) * (CH + 10)) / 2
+
+      allCards.forEach(p => {
+        const isSel = p.id === selectedId
+        const pg = container.append('g')
+          .attr('transform', `translate(${cardCenterX},${yPos})`)
+          .style('cursor', 'pointer')
+
+        renderCard(pg.node() as SVGGElement, p, isSel, { renderSpouses: false })
+
+        pg.on('click', (ev) => {
+          ev.stopPropagation(); setSelectedId(p.id); onNodeClick?.(p)
+        }).on('dblclick', (ev) => {
+          ev.stopPropagation(); onViewSubtree?.(p)
+        })
+
+        // Recurse: if this parent also has parents, draw them one step further right
+        const pParents  = (p.parents  ?? []) as ExtTreeNode[]
+        const pSiblings = (p.siblings ?? []) as ExtTreeNode[]
+        if (pParents.length > 0 || pSiblings.length > 0) {
+          renderAncestorChain(container, pParents, pSiblings, cardCenterX + CW / 2, yPos)
+        }
+
+        yPos += CH + 10
+      })
+
+      // Draw siblings below the parent cards
+      if (siblings.length > 0) {
+        const sibStartY = yPos + 12
+        const spineX = cardCenterX - CW / 2 - 10
+
+        // Vertical spine for siblings
+        container.append('line')
+          .attr('x1', spineX).attr('y1', sibStartY)
+          .attr('x2', spineX).attr('y2', sibStartY + (siblings.length - 1) * (CH + 12) + CH / 2)
+          .attr('stroke', CONN).attr('stroke-width', C_W)
+
+        // Connector from parent area to sibling spine
+        container.append('line')
+          .attr('x1', cardCenterX - CW / 2 - 6)
+          .attr('y1', originY)
+          .attr('x2', spineX)
+          .attr('y2', sibStartY)
+          .attr('stroke', CONN).attr('stroke-width', C_W)
+
+        let sibY = sibStartY
+        siblings.forEach(sib => {
+          const isSel = (sib as ExtTreeNode).id === selectedId
+          const sg = container.append('g')
+            .attr('transform', `translate(${cardCenterX},${sibY})`)
+            .style('cursor', 'pointer')
+
+          container.append('line')
+            .attr('x1', spineX).attr('y1', sibY)
+            .attr('x2', cardCenterX - CW / 2).attr('y2', sibY)
+            .attr('stroke', CONN).attr('stroke-width', C_W)
+
+          renderCard(sg.node() as SVGGElement, sib as ExtTreeNode, isSel, { renderSpouses: false })
+
+          sg.on('click', (ev) => {
+            ev.stopPropagation(); setSelectedId((sib as ExtTreeNode).id); onNodeClick?.(sib)
+          }).on('dblclick', (ev) => {
+            ev.stopPropagation(); onViewSubtree?.(sib)
+          })
+
+          sibY += CH + 12
+        })
+      }
+    }
+
     // ── Render card (always the same size — stable) ─────────────────────
     function renderCard(
       el: SVGGElement,
@@ -516,109 +619,14 @@ export function FamilyTreeCanvas({
         const spouseSelected = spouse.id === selectedId
         renderCard(spouseG.node() as SVGGElement, spouse, spouseSelected, { renderSpouses: false })
 
-        // Wife's family branch: parents above-right, siblings further right.
-        // Data comes from the API (spouse.parents / spouse.siblings), NOT tree-walking.
+        // Wife's full ancestor branch — recursive, supports unlimited generations.
         if (enableWifeBranch) {
           const spouseParents  = (spouse.parents  ?? []) as ExtTreeNode[]
           const spouseSiblings = (spouse.siblings ?? []) as ExtTreeNode[]
 
           if (spouseParents.length > 0 || spouseSiblings.length > 0) {
             const branchGroup = spouseG.append('g').attr('class', 'spouse-branch')
-
-            const branchStartX = CW / 2 + 4
-            const branchMidX   = branchStartX + 40
-
-            // Horizontal line from spouse card toward her family branch
-            branchGroup.append('line')
-              .attr('x1', branchStartX).attr('y1', 0)
-              .attr('x2', branchMidX).attr('y2', 0)
-              .attr('stroke', CONN).attr('stroke-width', C_W)
-
-            // ── Parents (father / mother) above-right ──────────────────
-            const allParentCards: ExtTreeNode[] = []
-            for (const p of spouseParents) {
-              allParentCards.push(p)
-              for (const ps of (p.spouses ?? []) as ExtTreeNode[]) {
-                if (!allParentCards.some(x => x.id === ps.id)) {
-                  allParentCards.push(ps)
-                }
-              }
-            }
-
-            const parentBaseX = branchMidX + CW / 2 + 40
-            let parentYOffset = -CH - 24
-
-            // Vertical spine connecting the branch to parents
-            if (allParentCards.length > 0) {
-              branchGroup.append('line')
-                .attr('x1', branchMidX).attr('y1', 0)
-                .attr('x2', branchMidX).attr('y2', parentYOffset)
-                .attr('stroke', CONN).attr('stroke-width', C_W)
-            }
-
-            allParentCards.forEach(p => {
-              const isParentSel = p.id === selectedId
-              const pg = branchGroup.append('g')
-                .attr('class', 'spouse-parent-node')
-                .attr('transform', `translate(${parentBaseX},${parentYOffset})`)
-                .style('cursor', 'pointer')
-
-              branchGroup.append('line')
-                .attr('x1', branchMidX).attr('y1', parentYOffset)
-                .attr('x2', parentBaseX - CW / 2 - 6).attr('y2', parentYOffset)
-                .attr('stroke', CONN).attr('stroke-width', C_W)
-
-              renderCard(pg.node() as SVGGElement, p, isParentSel, { renderSpouses: false })
-
-              pg.on('click', (ev) => {
-                ev.stopPropagation(); setSelectedId(p.id); onNodeClick?.(p)
-              }).on('dblclick', (ev) => {
-                ev.stopPropagation(); onViewSubtree?.(p)
-              })
-
-              parentYOffset -= CH + 16
-            })
-
-            // ── Siblings further right ─────────────────────────────────
-            if (spouseSiblings.length > 0) {
-              const sibBaseX = parentBaseX + CW + 40
-              let sibYOffset = -((spouseSiblings.length - 1) * (CH + 12)) / 2
-              const spineX = sibBaseX - CW / 2 - 10
-
-              branchGroup.append('line')
-                .attr('x1', spineX).attr('y1', sibYOffset - CH / 2)
-                .attr('x2', spineX).attr('y2', sibYOffset + spouseSiblings.length * (CH + 12))
-                .attr('stroke', CONN).attr('stroke-width', C_W)
-
-              // Connect parent area to sibling spine
-              branchGroup.append('line')
-                .attr('x1', parentBaseX + CW / 2 + 6).attr('y1', allParentCards.length > 0 ? -(CH + 24) : 0)
-                .attr('x2', spineX).attr('y2', allParentCards.length > 0 ? -(CH + 24) : 0)
-                .attr('stroke', CONN).attr('stroke-width', C_W)
-
-              spouseSiblings.forEach(sib => {
-                const isSel = (sib as ExtTreeNode).id === selectedId
-                const sg = branchGroup.append('g')
-                  .attr('class', 'spouse-sibling-node')
-                  .attr('transform', `translate(${sibBaseX},${sibYOffset})`)
-                  .style('cursor', 'pointer')
-
-                branchGroup.append('line')
-                  .attr('x1', spineX).attr('y1', sibYOffset)
-                  .attr('x2', sibBaseX - CW / 2).attr('y2', sibYOffset)
-                  .attr('stroke', CONN).attr('stroke-width', C_W)
-
-                renderCard(sg.node() as SVGGElement, sib as ExtTreeNode, isSel, { renderSpouses: false })
-
-                sg.on('click', (ev) => {
-                  ev.stopPropagation(); setSelectedId((sib as ExtTreeNode).id); onNodeClick?.(sib)
-                }).on('dblclick', (ev) => {
-                  ev.stopPropagation(); onViewSubtree?.(sib)
-                })
-
-                sibYOffset += CH + 12
-              })
-            }
+            renderAncestorChain(branchGroup, spouseParents, spouseSiblings, CW / 2 + 4, 0)
           }
         }
 
