@@ -25,10 +25,11 @@ const AVR = 18
 // ── Spacing ──────────────────────────────────────────────────────────────────
 const SP_GAP = 16
 const H_GAP  = 40
-// Increase vertical stride so stacked spouse cards have room
-const V_STR  = 180
+// Vertical stride must accommodate: person (CH/2) + spouse offset (CH+20)
+// + spouse half-height (CH/2) + wife branch siblings + margin.
+const V_STR  = 300
 
-const NS_W = CW * 2 + SP_GAP + H_GAP
+const NS_W = CW * 2.5 + SP_GAP + H_GAP
 const NS_H = V_STR
 
 // ── Connector lines ─────────────────────────────────────────────────────────
@@ -124,20 +125,41 @@ export function FamilyTreeCanvas({
         //     LEFT side        RIGHT side    ← children split horizontally
         //      ↙    ↙            ↘    ↘
         //   subtrees              subtrees   ← expand further outward
-        //
-        // 1. Walk single-child path from root → place vertically above center
-        // 2. First node with 2+ children = CENTER branching point
-        // 3. First ceil(n/2) children → LEFT, rest → RIGHT
-        // 4. Each side's subtrees expand horizontally outward
-        // 5. No lines cross between left and right
 
-        const X_GAP = CW + H_GAP + 40
-        const Y_GAP = CH + 24
-        const V_CHAIN_GAP = CH + 50
+        const X_GAP = CW + H_GAP + 80
+        const MIN_Y_GAP = CH * 2 + 60
+        const V_CHAIN_GAP = CH * 2 + 60
+
+        // Dynamic: compute how much vertical space a node actually occupies,
+        // including its spouse card and the wife's ancestor branch below it.
+        function nodeYExtent(node: HNode): number {
+          const person = node.data
+          let extent = MIN_Y_GAP
+
+          if (person.spouses && person.spouses.length > 0) {
+            const spouseBase = CH + 20 + CH / 2 + 20
+            const spouse = person.spouses[0] as ExtTreeNode
+            const parentCount = (spouse.parents?.length ?? 0)
+            const siblingCount = (spouse.siblings?.length ?? 0)
+
+            if (parentCount > 0 || siblingCount > 0) {
+              let branchCards = 0
+              for (const p of (spouse.parents ?? []) as ExtTreeNode[]) {
+                branchCards += 1 + ((p.spouses?.length ?? 0))
+              }
+              const parentStackH = branchCards > 0 ? (branchCards - 1) * (CH + 10) : 0
+              const sibStackH = siblingCount * (CH + 12)
+              extent = Math.max(extent, spouseBase + parentStackH / 2 + sibStackH + 40)
+            } else {
+              extent = Math.max(extent, spouseBase + 20)
+            }
+          }
+
+          return extent
+        }
 
         const rootNode = root as unknown as HNode
 
-        // Walk down single-child paths to find the branching node
         const ancestorChain: HNode[] = []
         let branchNode = rootNode
         while (branchNode.children && branchNode.children.length === 1) {
@@ -145,34 +167,26 @@ export function FamilyTreeCanvas({
           branchNode = branchNode.children[0] as HNode
         }
 
-        // Place branching node at center
         branchNode.x = 0
         branchNode.y = 0
 
-        // Place ancestor chain vertically above center
         for (let i = ancestorChain.length - 1; i >= 0; i--) {
           ancestorChain[i].x = 0
           ancestorChain[i].y = -(ancestorChain.length - i) * V_CHAIN_GAP
         }
 
-        // Split branching node's direct children: second half LEFT, first half RIGHT
-        // (older sons go right, younger sons go left — matching RTL heritage style)
         const directChildren = (branchNode.children || []) as HNode[]
         const mid = Math.floor(directChildren.length / 2)
         const rightChildren = directChildren.slice(0, mid)
         const leftChildren  = directChildren.slice(mid)
 
-        // Recursively lay out a subtree expanding horizontally.
-        // side = -1 for left, +1 for right.
-        // depth = how many generations from the branching center.
-        // Returns next available y position.
         function layoutSubtree(node: HNode, depth: number, side: -1 | 1, yStart: number): number {
           node.x = side * depth * X_GAP
           const kids = (node.children || []) as HNode[]
 
           if (kids.length === 0) {
             node.y = yStart
-            return yStart + Y_GAP
+            return yStart + nodeYExtent(node)
           }
 
           let nextY = yStart
@@ -192,27 +206,25 @@ export function FamilyTreeCanvas({
           for (const c of (node.children || []) as HNode[]) shiftSubtree(c, dy)
         }
 
-        // Layout LEFT side
         let leftNextY = 0
         for (const child of leftChildren) {
           leftNextY = layoutSubtree(child, 1, -1, leftNextY)
         }
-        const leftShift = -(leftNextY - Y_GAP) / 2
+        const leftShift = -(leftNextY - MIN_Y_GAP) / 2
         for (const child of leftChildren) shiftSubtree(child, leftShift)
 
-        // Layout RIGHT side
         let rightNextY = 0
         for (const child of rightChildren) {
           rightNextY = layoutSubtree(child, 1, 1, rightNextY)
         }
-        const rightShift = -(rightNextY - Y_GAP) / 2
+        const rightShift = -(rightNextY - MIN_Y_GAP) / 2
         for (const child of rightChildren) shiftSubtree(child, rightShift)
 
       } else {
         // Original vertical layout (also used as base for horizontal)
         d3.tree<ExtTreeNode>()
           .nodeSize([NS_W, NS_H])
-          .separation((a, b) => a.parent === b.parent ? 1 : 1.2)(root)
+          .separation((a, b) => a.parent === b.parent ? 1.15 : 1.5)(root)
 
         if (layout === 'horizontal') {
           // Rotate layout: root on the left, branches to the right
