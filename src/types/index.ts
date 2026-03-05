@@ -154,6 +154,8 @@ export interface TreeNode {
   privacyLevel: PrivacyLevel
   children?: TreeNode[]
   spouses?: TreeNode[]
+  parents?: TreeNode[]
+  siblings?: TreeNode[]
   _collapsed?: boolean
   _childCount?: number
   _depth?: number

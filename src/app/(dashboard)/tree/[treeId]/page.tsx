@@ -252,7 +252,7 @@ export default function TreeViewPage() {
                       onViewSubtree={handleViewSubtree}
                       language="ar"
                       layout={layoutStyle}
-                      enableWifeBranch={layoutStyle === 'centeredClassic'}
+                      enableWifeBranch
                     />
                   </div>
                 </div>
