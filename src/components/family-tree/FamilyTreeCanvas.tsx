@@ -392,10 +392,10 @@ export function FamilyTreeCanvas({
     }
 
     // ── Recursive ancestor chain renderer ──────────────────────────────
-    // Draws parents to the right, then their parents further right, etc.
-    // Each generation: parent cards (+ spouse) stacked vertically, siblings below,
-    // then recurse for grandparents.
-    const GEN_X_STEP = CW + 50
+    // Draws wife's parents and their ancestors to the right.
+    // Each generation shifts further right and slightly down so it avoids
+    // overlapping with the main centered tree cards.
+    const GEN_X_STEP = CW + 80
 
     function renderAncestorChain(
       container: d3.Selection<SVGGElement, unknown, null, undefined>,
@@ -637,7 +637,9 @@ export function FamilyTreeCanvas({
 
           if (spouseParents.length > 0 || spouseSiblings.length > 0) {
             const branchGroup = spouseG.append('g').attr('class', 'spouse-branch')
-            renderAncestorChain(branchGroup, spouseParents, spouseSiblings, CW / 2 + 4, 0)
+            // Start the branch a bit further right and slightly below the spouse
+            // card centre so it doesn't collide with the main tree cards.
+            renderAncestorChain(branchGroup, spouseParents, spouseSiblings, CW + 16, CH / 4)
           }
         }
 
