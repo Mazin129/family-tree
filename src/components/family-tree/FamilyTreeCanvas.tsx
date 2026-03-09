@@ -25,11 +25,10 @@ const AVR = 18
 // ── Spacing ──────────────────────────────────────────────────────────────────
 const SP_GAP = 16
 const H_GAP  = 40
-// Vertical stride must accommodate: person (CH/2) + spouse offset (CH+20)
-// + spouse half-height (CH/2) + wife branch siblings + margin.
-const V_STR  = 300
+// Vertical stride: enough for person + spouse + small wife branch, but not huge.
+const V_STR  = 240
 
-const NS_W = CW * 2.5 + SP_GAP + H_GAP
+const NS_W = CW * 2.2 + SP_GAP + H_GAP
 const NS_H = V_STR
 
 // ── Connector lines ─────────────────────────────────────────────────────────
@@ -127,8 +126,8 @@ export function FamilyTreeCanvas({
         //   subtrees              subtrees   ← expand further outward
 
         const X_GAP = CW + H_GAP + 80
-        const MIN_Y_GAP = CH * 2 + 60
-        const V_CHAIN_GAP = CH * 2 + 60
+        const MIN_Y_GAP = CH * 2 + 40
+        const V_CHAIN_GAP = CH * 2 + 40
 
         // Dynamic: compute how much vertical space a node actually occupies,
         // including its spouse card and the wife's ancestor branch below it.
@@ -396,7 +395,7 @@ export function FamilyTreeCanvas({
     // Draws parents to the right, then their parents further right, etc.
     // Each generation: parent cards (+ spouse) stacked vertically, siblings below,
     // then recurse for grandparents.
-    const GEN_X_STEP = CW + 60
+    const GEN_X_STEP = CW + 50
 
     function renderAncestorChain(
       container: d3.Selection<SVGGElement, unknown, null, undefined>,
