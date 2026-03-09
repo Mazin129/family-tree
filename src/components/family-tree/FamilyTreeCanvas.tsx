@@ -25,10 +25,10 @@ const AVR = 18
 // ── Spacing ──────────────────────────────────────────────────────────────────
 const SP_GAP = 16
 const H_GAP  = 40
-// Vertical stride: enough for person + spouse + small wife branch, but not huge.
-const V_STR  = 240
+// Vertical stride: enough for person + spouse, slightly tighter everywhere.
+const V_STR  = 210
 
-const NS_W = CW * 2.2 + SP_GAP + H_GAP
+const NS_W = CW * 2.1 + SP_GAP + H_GAP
 const NS_H = V_STR
 
 // ── Connector lines ─────────────────────────────────────────────────────────
@@ -126,14 +126,15 @@ export function FamilyTreeCanvas({
         //   subtrees              subtrees   ← expand further outward
 
         const X_GAP = CW + H_GAP + 80
-        const MIN_Y_GAP = CH * 2 + 40
-        const V_CHAIN_GAP = CH * 2 + 40
+        const MIN_Y_GAP = CH * 2 + 20
+        const V_CHAIN_GAP = CH * 2 + 20
 
         // Dynamic: compute how much vertical space a node actually occupies,
         // including its spouse card and the wife's ancestor branch below it.
         function nodeYExtent(node: HNode): number {
           const person = node.data
-          let extent = MIN_Y_GAP
+          // Base space for a node without spouse/branch (person card + margin)
+          let extent = CH * 1.6 + 24
 
           if (person.spouses && person.spouses.length > 0) {
             const spouseBase = CH + 20 + CH / 2 + 20
@@ -154,7 +155,8 @@ export function FamilyTreeCanvas({
             }
           }
 
-          return extent
+          // Never go below MIN_Y_GAP (still keep room between generations)
+          return Math.max(extent, MIN_Y_GAP)
         }
 
         const rootNode = root as unknown as HNode
@@ -223,7 +225,8 @@ export function FamilyTreeCanvas({
         // Original vertical layout (also used as base for horizontal)
         d3.tree<ExtTreeNode>()
           .nodeSize([NS_W, NS_H])
-          .separation((a, b) => a.parent === b.parent ? 1.15 : 1.5)(root)
+          // Slightly tighter between siblings, more space only between branches
+          .separation((a, b) => a.parent === b.parent ? 1.0 : 1.3)(root)
 
         if (layout === 'horizontal') {
           // Rotate layout: root on the left, branches to the right
