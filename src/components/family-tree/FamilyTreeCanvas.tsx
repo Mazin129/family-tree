@@ -615,12 +615,13 @@ export function FamilyTreeCanvas({
         const totalKids = person._childCount ?? (person.children?.length ?? 0)
         const isCollapsed = person._collapsed === true
 
-        // ── Collapse / expand toggle ──────────────────────────────────────
+        // ── Collapse / expand toggle (right side of card) ──────────────────
         if (totalKids > 0) {
-          const toggleY = CH / 2 + 14
+          const showSpouse = (person.spouses?.length ?? 0) > 0
+          const toggleX = showSpouse ? (CW + COUPLE_GAP) / 2 + CW / 2 + 14 : CW / 2 + 14
           const toggleG = d3.select(this).append('g')
             .attr('class', 'collapse-btn')
-            .attr('transform', `translate(0,${toggleY})`)
+            .attr('transform', `translate(${toggleX},0)`)
             .style('cursor', 'pointer')
             .on('click', (ev) => {
               ev.stopPropagation()
