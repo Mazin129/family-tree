@@ -73,6 +73,7 @@ export function FamilyTreeCanvas({
   const transformRef = useRef<d3.ZoomTransform>(d3.zoomIdentity)
   const initialFitDone = useRef(false)
   const gRef         = useRef<SVGGElement | null>(null)
+  const centerIdRef  = useRef<string | null>(null)
 
   const [selectedId,  setSelectedId]  = useState<string | null>(null)
   const [zoomLevel,   setZoomLevel]   = useState(1)
@@ -159,24 +160,46 @@ export function FamilyTreeCanvas({
           return Math.max(extent, MIN_Y_GAP)
         }
 
-        const rootNode = root as unknown as HNode
+        // Choose a stable visual center node. Once picked, we keep it even if
+        // new ancestors / siblings are added, so الفكي مقبول (or the current
+        // main person) stays in the middle.
+        const allNodesFlat = root.descendants() as HNode[]
+        let centerNode: HNode | null =
+          (centerIdRef.current
+            ? allNodesFlat.find(n => n.data.id === centerIdRef.current) ?? null
+            : null)
 
-        const ancestorChain: HNode[] = []
-        let branchNode = rootNode
-        while (branchNode.children && branchNode.children.length === 1) {
-          ancestorChain.push(branchNode)
-          branchNode = branchNode.children[0] as HNode
+        if (!centerNode) {
+          // Fallback: walk from root down the single‑child chain until we find
+          // the first node with 2+ children – previous behaviour.
+          let candidate = root as unknown as HNode
+          while (candidate.children && candidate.children.length === 1) {
+            candidate = candidate.children[0] as HNode
+          }
+          centerNode = candidate
         }
 
-        branchNode.x = 0
-        branchNode.y = 0
+        centerIdRef.current = centerNode.data.id
 
+        // Build ancestor chain ABOVE the chosen center by walking parents.
+        const ancestorChain: HNode[] = []
+        let p = centerNode.parent as HNode | null
+        while (p) {
+          ancestorChain.unshift(p)
+          p = p.parent as HNode | null
+        }
+
+        // Place center at (0,0)
+        centerNode.x = 0
+        centerNode.y = 0
+
+        // Place ancestors vertically above centre
         for (let i = ancestorChain.length - 1; i >= 0; i--) {
           ancestorChain[i].x = 0
           ancestorChain[i].y = -(ancestorChain.length - i) * V_CHAIN_GAP
         }
 
-        const directChildren = (branchNode.children || []) as HNode[]
+        const directChildren = (centerNode.children || []) as HNode[]
         const mid = Math.floor(directChildren.length / 2)
         const rightChildren = directChildren.slice(0, mid)
         const leftChildren  = directChildren.slice(mid)
