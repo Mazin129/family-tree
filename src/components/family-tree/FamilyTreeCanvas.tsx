@@ -16,23 +16,25 @@ interface FamilyTreeCanvasProps {
   enableWifeBranch?: boolean
 }
 
-// ── Card dimensions (single consistent size) ────────────────────────────────
-const CW  = 160
-const CH  = 64
-const CR  = 12
-const AVR = 18
+// ── Card dimensions ──────────────────────────────────────────────────────────
+const CW  = 150
+const CH  = 56
+const CR  = 10
+const AVR = 16
+
+// ── Couple (MyHeritage style: husband + wife side by side) ──────────────────
+const COUPLE_GAP  = 8
+const COUPLE_W    = CW * 2 + COUPLE_GAP
 
 // ── Spacing ──────────────────────────────────────────────────────────────────
-const SP_GAP = 16
-const H_GAP  = 40
-// Vertical stride: enough for person + spouse, slightly tighter everywhere.
-const V_STR  = 210
+const H_GAP  = 36
+const GEN_GAP = 90
 
-const NS_W = CW * 2.1 + SP_GAP + H_GAP
-const NS_H = V_STR
+const NS_W = COUPLE_W + H_GAP
+const NS_H = CH + GEN_GAP
 
 // ── Connector lines ─────────────────────────────────────────────────────────
-const CONN  = '#b8a898'
+const CONN  = '#b0a090'
 const C_W   = 1.5
 
 // ── Colours ──────────────────────────────────────────────────────────────────
@@ -48,8 +50,6 @@ const FEMALE_ACCENT = '#db2777'
 const FEMALE_AV_BG  = '#fbcfe8'
 const FEMALE_TEXT   = '#5b1a33'
 
-// When a person is deceased, keep the normal gender colours for the card,
-// but use a black accent strip (instead of blue/pink) to signal death.
 const DEAD_ACCENT = '#111827'
 
 interface ExtTreeNode extends TreeNode {
@@ -81,12 +81,14 @@ export function FamilyTreeCanvas({
   const prevLayoutRef = useRef(layout)
   const filteredData = useMemo(() => data, [data])
 
-  // Reset fit when layout changes so the view re-centers
   if (prevLayoutRef.current !== layout) {
     initialFitDone.current = false
     prevLayoutRef.current = layout
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  DRAW
+  // ═══════════════════════════════════════════════════════════════════════════
   const draw = useCallback(() => {
     if (!svgRef.current || !filteredData) return
     try {
@@ -96,16 +98,16 @@ export function FamilyTreeCanvas({
       const W = svgRef.current.clientWidth  || 960
       const H = svgRef.current.clientHeight || 640
 
-      // ── Defs ──────────────────────────────────────────────────────────────
+      // ── Defs ────────────────────────────────────────────────────────────
       const defs = svg.append('defs')
       const f1 = defs.append('filter').attr('id', 'card-shadow')
         .attr('x', '-20%').attr('y', '-20%').attr('width', '140%').attr('height', '150%')
-      f1.append('feDropShadow').attr('dx', 0).attr('dy', 2).attr('stdDeviation', 4).attr('flood-color', 'rgba(0,0,0,0.10)')
+      f1.append('feDropShadow').attr('dx', 0).attr('dy', 1.5).attr('stdDeviation', 3).attr('flood-color', 'rgba(0,0,0,0.10)')
       const f2 = defs.append('filter').attr('id', 'card-shadow-sel')
         .attr('x', '-20%').attr('y', '-20%').attr('width', '140%').attr('height', '150%')
-      f2.append('feDropShadow').attr('dx', 0).attr('dy', 3).attr('stdDeviation', 6).attr('flood-color', 'rgba(217,119,6,0.30)')
+      f2.append('feDropShadow').attr('dx', 0).attr('dy', 2).attr('stdDeviation', 5).attr('flood-color', 'rgba(217,119,6,0.28)')
 
-      // ── Hierarchy & layout ────────────────────────────────────────────────
+      // ── Hierarchy ───────────────────────────────────────────────────────
       const root = d3.hierarchy<ExtTreeNode>(
         filteredData as ExtTreeNode,
         d => d.children as ExtTreeNode[] | undefined,
@@ -113,116 +115,103 @@ export function FamilyTreeCanvas({
 
       type HNode = d3.HierarchyPointNode<ExtTreeNode>
 
+      const hasSpouse = (n: HNode) => (n.data.spouses?.length ?? 0) > 0
+
+      // Half-width of a node's visual bounding box (couple or single)
+      const halfW = (n: HNode) => hasSpouse(n) ? COUPLE_W / 2 : CW / 2
+
+      // ── Layout ──────────────────────────────────────────────────────────
       if (layout === 'centeredClassic') {
-        // Classic centered patriarch layout:
-        //
-        //           [great-grandfather]      ← ancestor chain (vertical)
-        //                  |
-        //             [grandfather]
-        //                  |
-        //              [مقبول]               ← branching node (CENTER)
-        //             /        \
-        //     LEFT side        RIGHT side    ← children split horizontally
-        //      ↙    ↙            ↘    ↘
-        //   subtrees              subtrees   ← expand further outward
+        const X_GAP = COUPLE_W + H_GAP + 40
+        const MIN_Y_GAP = CH + 28
+        const V_CHAIN_GAP = CH + GEN_GAP
 
-        const X_GAP = CW + H_GAP + 80
-        const MIN_Y_GAP = CH * 2 + 20
-        const V_CHAIN_GAP = CH * 2 + 20
-
-        // Dynamic: compute how much vertical space a node actually occupies,
-        // including its spouse card and the wife's ancestor branch below it.
         function nodeYExtent(node: HNode): number {
-          const person = node.data
-          // Base space for a node without spouse/branch (person card + margin)
-          let extent = CH * 1.6 + 24
-
-          if (person.spouses && person.spouses.length > 0) {
-            const spouseBase = CH + 20 + CH / 2 + 20
-            const spouse = person.spouses[0] as ExtTreeNode
-            const parentCount = (spouse.parents?.length ?? 0)
-            const siblingCount = (spouse.siblings?.length ?? 0)
-
-            if (parentCount > 0 || siblingCount > 0) {
-              let branchCards = 0
-              for (const p of (spouse.parents ?? []) as ExtTreeNode[]) {
-                branchCards += 1 + ((p.spouses?.length ?? 0))
+          let ext = MIN_Y_GAP
+          if (hasSpouse(node)) {
+            const spouse = node.data.spouses![0] as ExtTreeNode
+            const pCount = (spouse.parents?.length ?? 0)
+            const sCount = (spouse.siblings?.length ?? 0)
+            if (pCount > 0 || sCount > 0) {
+              let bc = 0
+              for (const pp of (spouse.parents ?? []) as ExtTreeNode[]) {
+                bc += 1 + (pp.spouses?.length ?? 0)
               }
-              const parentStackH = branchCards > 0 ? (branchCards - 1) * (CH + 10) : 0
-              const sibStackH = siblingCount * (CH + 12)
-              extent = Math.max(extent, spouseBase + parentStackH / 2 + sibStackH + 40)
-            } else {
-              extent = Math.max(extent, spouseBase + 20)
+              ext = Math.max(ext, CH + 24 + (bc * (CH + 8)) / 2 + sCount * (CH + 10) + 30)
             }
           }
-
-          // Never go below MIN_Y_GAP (still keep room between generations)
-          return Math.max(extent, MIN_Y_GAP)
+          return Math.max(ext, MIN_Y_GAP)
         }
 
-        // Choose a stable visual center node. Once picked, we keep it even if
-        // new ancestors / siblings are added, so الفكي مقبول (or the current
-        // main person) stays in the middle.
-        const allNodesFlat = root.descendants() as HNode[]
-        let centerNode: HNode | null =
-          (centerIdRef.current
-            ? allNodesFlat.find(n => n.data.id === centerIdRef.current) ?? null
-            : null)
+        const allFlat = root.descendants() as HNode[]
+        let centerNode: HNode | null = centerIdRef.current
+          ? allFlat.find(n => n.data.id === centerIdRef.current) ?? null
+          : null
 
         if (!centerNode) {
-          // Fallback: walk from root down the single‑child chain until we find
-          // the first node with 2+ children – previous behaviour.
-          let candidate = root as unknown as HNode
-          while (candidate.children && candidate.children.length === 1) {
-            candidate = candidate.children[0] as HNode
-          }
-          centerNode = candidate
+          let c = root as unknown as HNode
+          while (c.children && c.children.length === 1) c = c.children[0] as HNode
+          centerNode = c
         }
-
         centerIdRef.current = centerNode.data.id
 
-        // Build ancestor chain ABOVE the chosen center by walking parents.
         const ancestorChain: HNode[] = []
-        let p = centerNode.parent as HNode | null
-        while (p) {
-          ancestorChain.unshift(p)
-          p = p.parent as HNode | null
-        }
+        let pp = centerNode.parent as HNode | null
+        while (pp) { ancestorChain.unshift(pp); pp = pp.parent as HNode | null }
 
-        // Place center at (0,0)
         centerNode.x = 0
         centerNode.y = 0
 
-        // Place ancestors vertically above centre
         for (let i = ancestorChain.length - 1; i >= 0; i--) {
           ancestorChain[i].x = 0
           ancestorChain[i].y = -(ancestorChain.length - i) * V_CHAIN_GAP
         }
 
+        // Layout each ancestor's OTHER children (siblings of the path node)
+        for (let i = 0; i < ancestorChain.length; i++) {
+          const anc = ancestorChain[i]
+          const pathChild = i < ancestorChain.length - 1 ? ancestorChain[i + 1] : centerNode
+          const otherKids = ((anc.children || []) as HNode[]).filter(c => c !== pathChild)
+
+          if (otherKids.length > 0) {
+            const leftKids = otherKids.filter((_, idx) => idx % 2 === 0)
+            const rightKids = otherKids.filter((_, idx) => idx % 2 === 1)
+
+            let lx = -X_GAP
+            leftKids.forEach(k => { k.x = lx; k.y = anc.y; lx -= X_GAP; layoutDescendants(k, -1) })
+            let rx = X_GAP
+            rightKids.forEach(k => { k.x = rx; k.y = anc.y; rx += X_GAP; layoutDescendants(k, 1) })
+          }
+        }
+
         const directChildren = (centerNode.children || []) as HNode[]
         const mid = Math.floor(directChildren.length / 2)
-        const rightChildren = directChildren.slice(0, mid)
         const leftChildren  = directChildren.slice(mid)
+        const rightChildren = directChildren.slice(0, mid)
 
         function layoutSubtree(node: HNode, depth: number, side: -1 | 1, yStart: number): number {
           node.x = side * depth * X_GAP
           const kids = (node.children || []) as HNode[]
-
-          if (kids.length === 0) {
-            node.y = yStart
-            return yStart + nodeYExtent(node)
-          }
-
+          if (kids.length === 0) { node.y = yStart; return yStart + nodeYExtent(node) }
           let nextY = yStart
-          for (const child of kids) {
-            nextY = layoutSubtree(child, depth + 1, side, nextY)
-          }
-
-          const firstY = kids[0].y
-          const lastY  = kids[kids.length - 1].y
-          node.y = (firstY + lastY) / 2
-
+          for (const child of kids) nextY = layoutSubtree(child, depth + 1, side, nextY)
+          node.y = (kids[0].y + kids[kids.length - 1].y) / 2
           return nextY
+        }
+
+        function layoutDescendants(node: HNode, side: -1 | 1) {
+          const kids = (node.children || []) as HNode[]
+          if (kids.length === 0) return
+          let y = node.y + V_CHAIN_GAP
+          kids.forEach(k => {
+            k.x = node.x + side * X_GAP
+            k.y = y
+            y += nodeYExtent(k)
+            layoutDescendants(k, side)
+          })
+          const midY = (kids[0].y + kids[kids.length - 1].y) / 2
+          const shift = node.y + V_CHAIN_GAP / 2 - midY
+          kids.forEach(k => shiftSubtree(k, shift))
         }
 
         function shiftSubtree(node: HNode, dy: number) {
@@ -231,47 +220,41 @@ export function FamilyTreeCanvas({
         }
 
         let leftNextY = 0
-        for (const child of leftChildren) {
-          leftNextY = layoutSubtree(child, 1, -1, leftNextY)
+        for (const child of leftChildren) leftNextY = layoutSubtree(child, 1, -1, leftNextY)
+        if (leftChildren.length) {
+          const ls = -(leftNextY - MIN_Y_GAP) / 2
+          for (const child of leftChildren) shiftSubtree(child, ls)
         }
-        const leftShift = -(leftNextY - MIN_Y_GAP) / 2
-        for (const child of leftChildren) shiftSubtree(child, leftShift)
 
         let rightNextY = 0
-        for (const child of rightChildren) {
-          rightNextY = layoutSubtree(child, 1, 1, rightNextY)
+        for (const child of rightChildren) rightNextY = layoutSubtree(child, 1, 1, rightNextY)
+        if (rightChildren.length) {
+          const rs = -(rightNextY - MIN_Y_GAP) / 2
+          for (const child of rightChildren) shiftSubtree(child, rs)
         }
-        const rightShift = -(rightNextY - MIN_Y_GAP) / 2
-        for (const child of rightChildren) shiftSubtree(child, rightShift)
 
       } else {
-        // Original vertical layout (also used as base for horizontal)
         d3.tree<ExtTreeNode>()
           .nodeSize([NS_W, NS_H])
-          // Slightly tighter between siblings, more space only between branches
-          .separation((a, b) => a.parent === b.parent ? 1.0 : 1.3)(root)
+          .separation((a, b) => a.parent === b.parent ? 1.0 : 1.25)(root)
 
         if (layout === 'horizontal') {
-          // Rotate layout: root on the left, branches to the right
-          (root as any).each((n: HNode) => {
-            const ox = n.x
-            n.x = n.y
-            n.y = ox
-          })
+          (root as any).each((n: HNode) => { const ox = n.x; n.x = n.y; n.y = ox })
         }
       }
 
+      // ── Computed bounds ─────────────────────────────────────────────────
       const allNodes = root.descendants() as HNode[]
       const xs = allNodes.map(n => n.x!)
       const ys = allNodes.map(n => n.y!)
-      const treeW = (Math.max(...xs) - Math.min(...xs)) + NS_W
-      const treeH = (Math.max(...ys) - Math.min(...ys)) + NS_H
+      const treeW = (Math.max(...xs) - Math.min(...xs)) + NS_W * 2
+      const treeH = (Math.max(...ys) - Math.min(...ys)) + NS_H * 2
 
-      // ── Root group (zoom transforms this, not individual nodes) ──────────
+      // ── Root group ──────────────────────────────────────────────────────
       const g = svg.append('g')
       gRef.current = g.node()
 
-      // ── Zoom (only transforms the group — never redraws) ────────────────
+      // ── Zoom ────────────────────────────────────────────────────────────
       const zoom = d3.zoom<SVGSVGElement, unknown>()
         .scaleExtent([0.02, 5])
         .on('zoom', (e) => {
@@ -286,7 +269,7 @@ export function FamilyTreeCanvas({
         const padX = 80, padY = 60
         const scaleX = W / (treeW + padX * 2)
         const scaleY = H / (treeH + padY * 2)
-        const scale = Math.max(Math.min(scaleX, scaleY, 1.2), 0.35)
+        const scale = Math.max(Math.min(scaleX, scaleY, 1.2), 0.3)
         const rootX = allNodes[0].x!
         const rootY = allNodes[0].y!
         const initT = d3.zoomIdentity
@@ -300,25 +283,22 @@ export function FamilyTreeCanvas({
         svg.call(zoom.transform, transformRef.current)
       }
 
-      // ── Connectors ────────────────────────────────────────────────────────
+      // ══════════════════════════════════════════════════════════════════════
+      //  CONNECTORS
+      // ══════════════════════════════════════════════════════════════════════
       const connLayer = g.append('g').attr('class', 'conn-layer')
       const byParent = new Map<HNode, HNode[]>()
       root.links().forEach(({ source, target }) => {
-        const s = source as HNode
-        const t = target as HNode
+        const s = source as HNode, t = target as HNode
         if (!byParent.has(s)) byParent.set(s, [])
         byParent.get(s)!.push(t)
       })
 
       if (layout === 'centeredClassic') {
-        // CenteredClassic has TWO types of connectors:
-        // A) Vertical lines for the ancestor chain (parent & child both at x=0)
-        // B) Horizontal lines for left/right subtrees
-
         function drawHConn(parent: HNode, kids: HNode[], side: -1 | 1) {
           if (kids.length === 0) return
-          const edgeX = parent.x + side * (CW / 2 + 6)
-          const gap = Math.abs(kids[0].x - parent.x) - CW
+          const edgeX = parent.x + side * (halfW(parent) + 6)
+          const gap = Math.abs(kids[0].x - parent.x) - halfW(parent) - halfW(kids[0])
           const midX = edgeX + side * (gap > 0 ? gap / 2 : 20)
 
           connLayer.append('line')
@@ -327,11 +307,9 @@ export function FamilyTreeCanvas({
             .attr('stroke', CONN).attr('stroke-width', C_W)
 
           if (kids.length > 1) {
-            const minCY = Math.min(...kids.map(c => c.y))
-            const maxCY = Math.max(...kids.map(c => c.y))
             connLayer.append('line')
-              .attr('x1', midX).attr('y1', minCY)
-              .attr('x2', midX).attr('y2', maxCY)
+              .attr('x1', midX).attr('y1', Math.min(...kids.map(c => c.y)))
+              .attr('x2', midX).attr('y2', Math.max(...kids.map(c => c.y)))
               .attr('stroke', CONN).attr('stroke-width', C_W)
           } else {
             connLayer.append('line')
@@ -341,381 +319,302 @@ export function FamilyTreeCanvas({
           }
 
           kids.forEach(child => {
-            const childEdgeX = child.x - side * (CW / 2 + 6)
+            const childEdge = child.x - side * (halfW(child) + 6)
             connLayer.append('line')
               .attr('x1', midX).attr('y1', child.y)
-              .attr('x2', childEdgeX).attr('y2', child.y)
+              .attr('x2', childEdge).attr('y2', child.y)
               .attr('stroke', CONN).attr('stroke-width', C_W)
           })
         }
 
         byParent.forEach((children, parent) => {
-          const verticalKids = children.filter(c => c.x === parent.x)
-          const leftKids     = children.filter(c => c.x < parent.x)
-          const rightKids    = children.filter(c => c.x > parent.x)
+          const vert  = children.filter(c => c.x === parent.x)
+          const left  = children.filter(c => c.x < parent.x)
+          const right = children.filter(c => c.x > parent.x)
 
-          // (A) Vertical connectors for ancestor chain
-          verticalKids.forEach(child => {
-            const topY = parent.y + CH / 2 + 6
-            const botY = child.y  - CH / 2 - 6
+          vert.forEach(child => {
             connLayer.append('line')
-              .attr('x1', parent.x).attr('y1', topY)
-              .attr('x2', child.x).attr('y2', botY)
+              .attr('x1', parent.x).attr('y1', parent.y + CH / 2 + 4)
+              .attr('x2', child.x).attr('y2', child.y - CH / 2 - 4)
               .attr('stroke', CONN).attr('stroke-width', C_W)
           })
 
-          // (B) Horizontal connectors for left/right subtrees
-          if (leftKids.length > 0)  drawHConn(parent, leftKids, -1)
-          if (rightKids.length > 0) drawHConn(parent, rightKids, 1)
+          if (left.length > 0)  drawHConn(parent, left, -1)
+          if (right.length > 0) drawHConn(parent, right, 1)
         })
       } else {
-        // Vertical connectors (default / horizontal layout)
+        // Vertical / horizontal: orthogonal L-connectors
         byParent.forEach((children, parent) => {
           const px = parent.x
-          const topY = parent.y + CH / 2 + 6
-          const botY = children[0].y - CH / 2 - 6
+          const topY = parent.y + CH / 2 + 4
+          const botY = children[0].y - CH / 2 - 4
           const midY = topY + (botY - topY) * 0.5
 
-          const path = d3.path()
-          path.moveTo(px, topY)
-          path.lineTo(px, midY)
-          connLayer.append('path').attr('d', path.toString())
-            .attr('fill', 'none').attr('stroke', CONN).attr('stroke-width', C_W)
+          connLayer.append('line')
+            .attr('x1', px).attr('y1', topY)
+            .attr('x2', px).attr('y2', midY)
+            .attr('stroke', CONN).attr('stroke-width', C_W)
 
           if (children.length > 1) {
             const minCX = Math.min(...children.map(c => c.x))
             const maxCX = Math.max(...children.map(c => c.x))
             connLayer.append('line')
-              .attr('x1', minCX).attr('y1', midY).attr('x2', maxCX).attr('y2', midY)
+              .attr('x1', minCX).attr('y1', midY)
+              .attr('x2', maxCX).attr('y2', midY)
               .attr('stroke', CONN).attr('stroke-width', C_W)
           }
 
           children.forEach(child => {
             connLayer.append('line')
-              .attr('x1', child.x).attr('y1', midY).attr('x2', child.x).attr('y2', botY)
+              .attr('x1', child.x).attr('y1', midY)
+              .attr('x2', child.x).attr('y2', botY)
               .attr('stroke', CONN).attr('stroke-width', C_W)
           })
         })
       }
 
-    // ── Palette helper ────────────────────────────────────────────────────
-    function pal(p: ExtTreeNode) {
-      const m = p.gender === 'MALE'
-      const base = {
-        bg:     m ? MALE_BG     : FEMALE_BG,
-        border: m ? MALE_BORDER : FEMALE_BORDER,
-        avBg:   m ? MALE_AV_BG  : FEMALE_AV_BG,
-        text:   m ? MALE_TEXT   : FEMALE_TEXT,
-      }
-      const accent = p.isAlive ? (m ? MALE_ACCENT : FEMALE_ACCENT) : DEAD_ACCENT
-      return { ...base, accent }
-    }
-
-    function getName(p: ExtTreeNode) {
-      const raw = language === 'ar' ? (p.nameArabic || p.name) : p.name
-      // Show the clean name without decorative tatweel / stretching
-      return raw || ''
-    }
-
-    // ── Recursive ancestor chain renderer ──────────────────────────────
-    // Draws wife's parents and their ancestors to the right.
-    // Each generation shifts further right and slightly down so it avoids
-    // overlapping with the main centered tree cards.
-    const GEN_X_STEP = CW + 80
-
-    function renderAncestorChain(
-      container: d3.Selection<SVGGElement, unknown, null, undefined>,
-      ancestors: ExtTreeNode[],
-      siblings: ExtTreeNode[],
-      originX: number,
-      originY: number,
-    ) {
-      if (ancestors.length === 0 && siblings.length === 0) return
-
-      const cardCenterX = originX + GEN_X_STEP / 2 + CW / 2
-
-      // Collect parent cards including their spouses (father + mother pair)
-      const allCards: ExtTreeNode[] = []
-      for (const p of ancestors) {
-        allCards.push(p)
-        for (const ps of (p.spouses ?? []) as ExtTreeNode[]) {
-          if (!allCards.some(x => x.id === ps.id)) allCards.push(ps)
+      // ══════════════════════════════════════════════════════════════════════
+      //  HELPERS
+      // ══════════════════════════════════════════════════════════════════════
+      function pal(p: ExtTreeNode) {
+        const m = p.gender === 'MALE'
+        return {
+          bg:     m ? MALE_BG     : FEMALE_BG,
+          border: m ? MALE_BORDER : FEMALE_BORDER,
+          avBg:   m ? MALE_AV_BG  : FEMALE_AV_BG,
+          text:   m ? MALE_TEXT   : FEMALE_TEXT,
+          accent: p.isAlive ? (m ? MALE_ACCENT : FEMALE_ACCENT) : DEAD_ACCENT,
         }
       }
 
-      // Horizontal connector from origin to the first generation
-      container.append('line')
-        .attr('x1', originX).attr('y1', originY)
-        .attr('x2', cardCenterX - CW / 2 - 6).attr('y2', originY)
-        .attr('stroke', CONN).attr('stroke-width', C_W)
+      function getName(p: ExtTreeNode) {
+        return (language === 'ar' ? (p.nameArabic || p.name) : p.name) || ''
+      }
 
-      // Stack parent cards vertically, centred around originY
-      let yPos = originY - ((allCards.length - 1) * (CH + 10)) / 2
+      // ── Draw a single card (no spouse logic) ─────────────────────────────
+      function drawSingleCard(
+        g: d3.Selection<SVGGElement, unknown, null, undefined>,
+        person: ExtTreeNode,
+        isSel: boolean,
+      ) {
+        const c = pal(person)
+        const name = getName(person)
+        const ox = -CW / 2
 
-      allCards.forEach(p => {
-        const isSel = p.id === selectedId
-        const pg = container.append('g')
-          .attr('transform', `translate(${cardCenterX},${yPos})`)
-          .style('cursor', 'pointer')
+        g.append('rect')
+          .attr('x', ox).attr('y', -CH / 2).attr('width', CW).attr('height', CH).attr('rx', CR)
+          .attr('fill', c.bg).attr('stroke', isSel ? '#d97706' : c.border)
+          .attr('stroke-width', isSel ? 2 : 1.2)
+          .attr('filter', isSel ? 'url(#card-shadow-sel)' : 'url(#card-shadow)')
 
-        renderCard(pg.node() as SVGGElement, p, isSel, { renderSpouses: false })
+        g.append('rect')
+          .attr('x', ox).attr('y', -CH / 2).attr('width', 4).attr('height', CH)
+          .attr('rx', 2).attr('fill', c.accent)
 
-        pg.on('click', (ev) => {
-          ev.stopPropagation(); setSelectedId(p.id); onNodeClick?.(p)
-        }).on('dblclick', (ev) => {
-          ev.stopPropagation(); onViewSubtree?.(p)
+        const avCX = ox + 26
+        g.append('circle').attr('cx', avCX).attr('cy', 0).attr('r', AVR)
+          .attr('fill', c.avBg).attr('stroke', c.border).attr('stroke-width', 1)
+
+        if (person.photo) {
+          const cid = `ac-${person.id}`
+          g.append('defs').append('clipPath').attr('id', cid)
+            .append('circle').attr('cx', avCX).attr('cy', 0).attr('r', AVR)
+          g.append('image').attr('href', person.photo)
+            .attr('x', avCX - AVR).attr('y', -AVR)
+            .attr('width', AVR * 2).attr('height', AVR * 2)
+            .attr('clip-path', `url(#${cid})`).attr('preserveAspectRatio', 'xMidYMid slice')
+        } else {
+          const headR = AVR * 0.52
+          const headCY = -3
+          g.append('rect')
+            .attr('x', avCX - AVR * 0.75).attr('y', headCY + headR * 0.4)
+            .attr('width', AVR * 1.5).attr('height', AVR * 1.3)
+            .attr('rx', AVR * 0.45).attr('fill', c.accent).attr('opacity', 0.16)
+          g.append('circle').attr('cx', avCX).attr('cy', headCY).attr('r', headR)
+            .attr('fill', '#f9fafb').attr('stroke', c.border).attr('stroke-width', 0.7)
+          g.append('circle').attr('cx', avCX).attr('cy', headCY + 0.8).attr('r', headR * 0.6)
+            .attr('fill', person.gender === 'MALE' ? '#dbeafe' : '#fce7f3').attr('opacity', 0.9)
+        }
+
+        const textX = ox + CW / 2
+        g.append('text').attr('x', textX).attr('y', -2)
+          .attr('text-anchor', 'middle').attr('font-size', 11.5).attr('font-weight', '700')
+          .attr('font-family', "'Cairo','Tajawal',sans-serif").attr('fill', c.text)
+          .text(clip(name || 'مجهول', 16))
+
+        const meta: string[] = []
+        if (person.tribe) meta.push(person.tribe)
+        if (person.birthYear) meta.push(`${person.birthYear}`)
+        if (person.deathYear) meta.push(`† ${person.deathYear}`)
+        if (meta.length) {
+          g.append('text').attr('x', textX).attr('y', 13)
+            .attr('text-anchor', 'middle').attr('font-size', 9).attr('font-family', "'Cairo',sans-serif")
+            .attr('fill', '#64748b')
+            .text(clip(meta.join(' · '), 22))
+        }
+      }
+
+      // ── Recursive wife-branch renderer ───────────────────────────────────
+      const GEN_X_STEP = CW + 60
+
+      function renderWifeBranch(
+        container: d3.Selection<SVGGElement, unknown, null, undefined>,
+        ancestors: ExtTreeNode[],
+        siblings: ExtTreeNode[],
+        originX: number,
+        originY: number,
+      ) {
+        if (ancestors.length === 0 && siblings.length === 0) return
+
+        const cardCX = originX + GEN_X_STEP / 2 + CW / 2
+        const allCards: ExtTreeNode[] = []
+        for (const a of ancestors) {
+          allCards.push(a)
+          for (const sp of (a.spouses ?? []) as ExtTreeNode[])
+            if (!allCards.some(x => x.id === sp.id)) allCards.push(sp)
+        }
+
+        container.append('line')
+          .attr('x1', originX).attr('y1', originY)
+          .attr('x2', cardCX - CW / 2 - 4).attr('y2', originY)
+          .attr('stroke', CONN).attr('stroke-width', C_W)
+
+        let yPos = originY - ((allCards.length - 1) * (CH + 8)) / 2
+        allCards.forEach(a => {
+          const isSel = a.id === selectedId
+          const pg = container.append('g')
+            .attr('transform', `translate(${cardCX},${yPos})`).style('cursor', 'pointer')
+          drawSingleCard(pg, a, isSel)
+          pg.on('click', (ev) => { ev.stopPropagation(); setSelectedId(a.id); onNodeClick?.(a) })
+            .on('dblclick', (ev) => { ev.stopPropagation(); onViewSubtree?.(a) })
+
+          const pP = (a.parents ?? []) as ExtTreeNode[]
+          const pS = (a.siblings ?? []) as ExtTreeNode[]
+          if (pP.length > 0 || pS.length > 0)
+            renderWifeBranch(container, pP, pS, cardCX + CW / 2, yPos)
+
+          yPos += CH + 8
         })
 
-        // Recurse: if this parent also has parents, draw them one step further right
-        const pParents  = (p.parents  ?? []) as ExtTreeNode[]
-        const pSiblings = (p.siblings ?? []) as ExtTreeNode[]
-        if (pParents.length > 0 || pSiblings.length > 0) {
-          renderAncestorChain(container, pParents, pSiblings, cardCenterX + CW / 2, yPos)
-        }
-
-        yPos += CH + 10
-      })
-
-      // Draw siblings below the parent cards
-      if (siblings.length > 0) {
-        const sibStartY = yPos + 12
-        const spineX = cardCenterX - CW / 2 - 10
-
-        // Vertical spine for siblings
-        container.append('line')
-          .attr('x1', spineX).attr('y1', sibStartY)
-          .attr('x2', spineX).attr('y2', sibStartY + (siblings.length - 1) * (CH + 12) + CH / 2)
-          .attr('stroke', CONN).attr('stroke-width', C_W)
-
-        // Connector from parent area to sibling spine
-        container.append('line')
-          .attr('x1', cardCenterX - CW / 2 - 6)
-          .attr('y1', originY)
-          .attr('x2', spineX)
-          .attr('y2', sibStartY)
-          .attr('stroke', CONN).attr('stroke-width', C_W)
-
-        let sibY = sibStartY
-        siblings.forEach(sib => {
-          const isSel = (sib as ExtTreeNode).id === selectedId
-          const sg = container.append('g')
-            .attr('transform', `translate(${cardCenterX},${sibY})`)
-            .style('cursor', 'pointer')
-
+        if (siblings.length > 0) {
+          const sibStartY = yPos + 8
+          const spineX = cardCX - CW / 2 - 8
           container.append('line')
-            .attr('x1', spineX).attr('y1', sibY)
-            .attr('x2', cardCenterX - CW / 2).attr('y2', sibY)
+            .attr('x1', spineX).attr('y1', sibStartY)
+            .attr('x2', spineX).attr('y2', sibStartY + (siblings.length - 1) * (CH + 10) + CH / 2)
+            .attr('stroke', CONN).attr('stroke-width', C_W)
+          container.append('line')
+            .attr('x1', cardCX - CW / 2 - 4).attr('y1', originY)
+            .attr('x2', spineX).attr('y2', sibStartY)
             .attr('stroke', CONN).attr('stroke-width', C_W)
 
-          renderCard(sg.node() as SVGGElement, sib as ExtTreeNode, isSel, { renderSpouses: false })
-
-          sg.on('click', (ev) => {
-            ev.stopPropagation(); setSelectedId((sib as ExtTreeNode).id); onNodeClick?.(sib)
-          }).on('dblclick', (ev) => {
-            ev.stopPropagation(); onViewSubtree?.(sib)
+          let sibY = sibStartY
+          siblings.forEach(sib => {
+            const isSel = (sib as ExtTreeNode).id === selectedId
+            const sg = container.append('g')
+              .attr('transform', `translate(${cardCX},${sibY})`).style('cursor', 'pointer')
+            container.append('line')
+              .attr('x1', spineX).attr('y1', sibY)
+              .attr('x2', cardCX - CW / 2).attr('y2', sibY)
+              .attr('stroke', CONN).attr('stroke-width', C_W)
+            drawSingleCard(sg, sib as ExtTreeNode, isSel)
+            sg.on('click', (ev) => { ev.stopPropagation(); setSelectedId((sib as ExtTreeNode).id); onNodeClick?.(sib) })
+              .on('dblclick', (ev) => { ev.stopPropagation(); onViewSubtree?.(sib) })
+            sibY += CH + 10
           })
-
-          sibY += CH + 12
-        })
-      }
-    }
-
-    // ── Render card (always the same size — stable) ─────────────────────
-    function renderCard(
-      el: SVGGElement,
-      person: ExtTreeNode,
-      isSel: boolean,
-      opts?: { renderSpouses?: boolean },
-    ) {
-      const g = d3.select(el)
-      const c = pal(person)
-      const name = getName(person)
-      const ox = -CW / 2
-      const renderSpouses = opts?.renderSpouses ?? true
-
-      g.append('rect')
-        .attr('x', ox).attr('y', -CH / 2).attr('width', CW).attr('height', CH).attr('rx', CR)
-        .attr('fill', c.bg).attr('stroke', isSel ? '#d97706' : c.border)
-        .attr('stroke-width', isSel ? 2 : 1.2)
-        .attr('filter', isSel ? 'url(#card-shadow-sel)' : 'url(#card-shadow)')
-
-      g.append('rect')
-        .attr('x', ox).attr('y', -CH / 2).attr('width', 5).attr('height', CH)
-        .attr('rx', 2.5).attr('fill', c.accent)
-
-      const avCX = ox + 30
-      const avCY = 0
-      g.append('circle').attr('cx', avCX).attr('cy', avCY).attr('r', AVR)
-        .attr('fill', c.avBg).attr('stroke', c.border).attr('stroke-width', 1.2)
-
-      if (person.photo) {
-        const cid = `ac-${person.id}`
-        g.append('defs').append('clipPath').attr('id', cid)
-          .append('circle').attr('cx', avCX).attr('cy', avCY).attr('r', AVR)
-        g.append('image').attr('href', person.photo)
-          .attr('x', avCX - AVR).attr('y', avCY - AVR)
-          .attr('width', AVR * 2).attr('height', AVR * 2)
-          .attr('clip-path', `url(#${cid})`).attr('preserveAspectRatio', 'xMidYMid slice')
-      } else {
-        // Gender-specific silhouette avatar inside the circle (MyHeritage-style)
-        const headR = AVR * 0.55
-        const headCY = avCY - 4
-        const bodyTop = headCY + headR * 0.4
-        const bodyHeight = AVR * 1.4
-        const bodyWidth = AVR * 1.6
-        const bodyX = avCX - bodyWidth / 2
-
-        // Body (torso / shoulders)
-        g.append('rect')
-          .attr('x', bodyX)
-          .attr('y', bodyTop)
-          .attr('width', bodyWidth)
-          .attr('height', bodyHeight)
-          .attr('rx', AVR * 0.5)
-          .attr('fill', c.accent)
-          .attr('opacity', 0.18)
-
-        // Outer head
-        g.append('circle')
-          .attr('cx', avCX)
-          .attr('cy', headCY)
-          .attr('r', headR)
-          .attr('fill', '#f9fafb')
-          .attr('stroke', c.border)
-          .attr('stroke-width', 0.8)
-
-        // Inner face color hint (slightly different per gender)
-        g.append('circle')
-          .attr('cx', avCX)
-          .attr('cy', headCY + 1)
-          .attr('r', headR * 0.65)
-          .attr('fill', person.gender === 'MALE' ? '#dbeafe' : '#fce7f3')
-          .attr('opacity', 0.95)
+        }
       }
 
-      // Center the main name text within the card
-      const textX = ox + CW / 2
-      g.append('text').attr('x', textX).attr('y', 0)
-        .attr('text-anchor', 'middle').attr('font-size', 12.5).attr('font-weight', '700')
-        .attr('font-family', "'Cairo', 'Tajawal', sans-serif").attr('fill', c.text)
-        .text(clip(name || 'مجهول', 14))
+      // ── Render couple unit (MyHeritage style: side by side) ──────────────
+      function renderCoupleNode(
+        el: SVGGElement,
+        person: ExtTreeNode,
+        isSel: boolean,
+      ) {
+        const g = d3.select(el)
+        const showSpouse = (person.spouses?.length ?? 0) > 0
+        const personShiftX = showSpouse ? -(CW + COUPLE_GAP) / 2 : 0
 
-      const meta: string[] = []
-      if (person.tribe) meta.push(person.tribe)
-      if (person.birthYear) meta.push(`${person.birthYear}`)
-      if (meta.length) {
-        g.append('text').attr('x', textX).attr('y', 16)
-          .attr('text-anchor', 'middle').attr('font-size', 10).attr('font-family', "'Cairo', sans-serif")
-          .attr('fill', '#64748b')
-          .text(clip(meta.join(' · '), 20))
-      }
+        // Person card (shifted left if couple)
+        const personG = g.append('g')
+          .attr('transform', `translate(${personShiftX},0)`)
+        drawSingleCard(personG, person, isSel)
 
-      // ── Spouse as separate linked card (below main card with connector) ────
-      if (renderSpouses && person.spouses && person.spouses.length > 0) {
-        // Vertical offset used in the earlier version that you preferred
-        const spouseOffsetY = CH + 20
-        const spouseCenterX = 0
+        if (showSpouse) {
+          const spouse = person.spouses![0] as ExtTreeNode
+          const spouseShiftX = (CW + COUPLE_GAP) / 2
 
-        // Draw a vertical connector on the left side linking both cards,
-        // plus short horizontal stubs into each card (like a marriage line).
-        const leftX = -CW / 2 - 10
+          // Marriage line between husband and wife
+          g.append('line')
+            .attr('x1', personShiftX + CW / 2).attr('y1', 0)
+            .attr('x2', spouseShiftX - CW / 2).attr('y2', 0)
+            .attr('stroke', CONN).attr('stroke-width', 2)
 
-        // Vertical line between person and spouse
-        g.append('line')
-          .attr('x1', leftX)
-          .attr('y1', 0)
-          .attr('x2', leftX)
-          .attr('y2', spouseOffsetY)
-          .attr('stroke', CONN)
-          .attr('stroke-width', C_W)
+          // Two small parallel lines (= symbol) for marriage
+          const mx = (personShiftX + CW / 2 + spouseShiftX - CW / 2) / 2
+          g.append('line')
+            .attr('x1', mx - 3).attr('y1', -3)
+            .attr('x2', mx + 3).attr('y2', -3)
+            .attr('stroke', CONN).attr('stroke-width', 1.5)
+          g.append('line')
+            .attr('x1', mx - 3).attr('y1', 3)
+            .attr('x2', mx + 3).attr('y2', 3)
+            .attr('stroke', CONN).attr('stroke-width', 1.5)
 
-        // Horizontal into main card
-        g.append('line')
-          .attr('x1', leftX)
-          .attr('y1', 0)
-          .attr('x2', -CW / 2)
-          .attr('y2', 0)
-          .attr('stroke', CONN)
-          .attr('stroke-width', C_W)
+          // Spouse card
+          const spouseG = g.append('g')
+            .attr('class', 'spouse-node')
+            .attr('transform', `translate(${spouseShiftX},0)`)
+            .style('cursor', 'pointer')
+          drawSingleCard(spouseG, spouse, spouse.id === selectedId)
 
-        // Horizontal into spouse card
-        g.append('line')
-          .attr('x1', leftX)
-          .attr('y1', spouseOffsetY)
-          .attr('x2', -CW / 2)
-          .attr('y2', spouseOffsetY)
-          .attr('stroke', CONN)
-          .attr('stroke-width', C_W)
+          spouseG
+            .on('click', (ev) => { ev.stopPropagation(); setSelectedId(spouse.id); onNodeClick?.(spouse) })
+            .on('dblclick', (ev) => { ev.stopPropagation(); onViewSubtree?.(spouse) })
 
-        const spouse = person.spouses[0] as ExtTreeNode
-        const spouseG = g.append('g')
-          .attr('class', 'spouse-node')
-          .attr('transform', `translate(${spouseCenterX},${spouseOffsetY})`)
-          .style('cursor', 'pointer')
-
-        const spouseSelected = spouse.id === selectedId
-        renderCard(spouseG.node() as SVGGElement, spouse, spouseSelected, { renderSpouses: false })
-
-        // Wife's full ancestor branch — recursive, supports unlimited generations.
-        if (enableWifeBranch) {
-          const spouseParents  = (spouse.parents  ?? []) as ExtTreeNode[]
-          const spouseSiblings = (spouse.siblings ?? []) as ExtTreeNode[]
-
-          if (spouseParents.length > 0 || spouseSiblings.length > 0) {
-            const branchGroup = spouseG.append('g').attr('class', 'spouse-branch')
-            // Start the branch a bit further right and slightly below the spouse
-            // card centre so it doesn't collide with the main tree cards.
-            renderAncestorChain(branchGroup, spouseParents, spouseSiblings, CW + 16, CH / 4)
+          // Wife's ancestor branch (to the right of spouse card)
+          if (enableWifeBranch) {
+            const spouseParents  = (spouse.parents  ?? []) as ExtTreeNode[]
+            const spouseSiblings = (spouse.siblings ?? []) as ExtTreeNode[]
+            if (spouseParents.length > 0 || spouseSiblings.length > 0) {
+              const branchG = spouseG.append('g').attr('class', 'spouse-branch')
+              renderWifeBranch(branchG, spouseParents, spouseSiblings, CW / 2 + 12, 0)
+            }
           }
         }
-
-        // Interactions for spouse card
-        spouseG
-          .on('click', (ev) => {
-            ev.stopPropagation()
-            setSelectedId(spouse.id)
-            onNodeClick?.(spouse)
-          })
-          .on('dblclick', (ev) => {
-            ev.stopPropagation()
-            onViewSubtree?.(spouse)
-          })
       }
-    }
 
-    // ── Node groups ───────────────────────────────────────────────────────
-    const nodeGs = g.append('g').attr('class', 'nodes-layer')
-      .selectAll<SVGGElement, HNode>('.node')
-      .data(allNodes)
-      .enter().append('g')
-      .attr('class', 'node')
-      .attr('transform', d => `translate(${d.x},${d.y})`)
-      .style('cursor', 'pointer')
+      // ══════════════════════════════════════════════════════════════════════
+      //  NODE GROUPS
+      // ══════════════════════════════════════════════════════════════════════
+      const nodeGs = g.append('g').attr('class', 'nodes-layer')
+        .selectAll<SVGGElement, HNode>('.node')
+        .data(allNodes)
+        .enter().append('g')
+        .attr('class', 'node')
+        .attr('transform', d => `translate(${d.x},${d.y})`)
+        .style('cursor', 'pointer')
 
       nodeGs.each(function(d) {
         const person = d.data
         const isSel = person.id === selectedId
-        renderCard(this, person, isSel)
+        renderCoupleNode(this, person, isSel)
 
-        const hasKids = (person.children && person.children.length > 0)
-
-        // ── Add button ────────────────────────────────────────────────────
         if (!readOnly) {
-          const addBtnY = CH / 2 + (hasKids ? 28 : 8)
+          const addBtnY = CH / 2 + ((person.children?.length ?? 0) > 0 ? 24 : 6)
           const addBtn = d3.select(this).append('g')
             .attr('class', 'add-btn')
             .attr('transform', `translate(0,${addBtnY})`)
             .style('opacity', 0).style('cursor', 'pointer')
             .on('click', (ev) => { ev.stopPropagation(); onNodeAdd?.(person) })
 
-          addBtn.append('circle').attr('r', 12)
+          addBtn.append('circle').attr('r', 10)
             .attr('fill', '#d4922d').attr('stroke', 'white').attr('stroke-width', 2)
-          addBtn.append('text').attr('text-anchor', 'middle').attr('y', 5)
-            .attr('font-size', 16).attr('font-weight', '700').attr('fill', 'white').text('+')
+          addBtn.append('text').attr('text-anchor', 'middle').attr('y', 4.5)
+            .attr('font-size', 14).attr('font-weight', '700').attr('fill', 'white').text('+')
         }
       })
 
-      // ── Hover / click ─────────────────────────────────────────────────────
       nodeGs
         .on('mouseenter', function() {
           d3.select(this).select('.add-btn').transition().duration(150).style('opacity', 1)
@@ -724,19 +623,14 @@ export function FamilyTreeCanvas({
           d3.select(this).select('.add-btn').transition().duration(150).style('opacity', 0)
         })
         .on('click', (ev, d) => {
-          ev.stopPropagation()
-          setSelectedId(d.data.id)
-          onNodeClick?.(d.data)
+          ev.stopPropagation(); setSelectedId(d.data.id); onNodeClick?.(d.data)
         })
         .on('dblclick', (ev, d) => {
-          ev.stopPropagation()
-          onViewSubtree?.(d.data)
+          ev.stopPropagation(); onViewSubtree?.(d.data)
         })
 
       svg.on('click', () => { setSelectedId(null) })
     } catch (err) {
-      // Prevent D3 runtime errors from tearing down the whole dashboard
-      // and surface them only in the console instead.
       // eslint-disable-next-line no-console
       console.error('[FamilyTreeCanvas] draw error', err)
     }
@@ -755,16 +649,12 @@ export function FamilyTreeCanvas({
     if (!svgRef.current || !zoomRef.current) return
     d3.select(svgRef.current).transition().duration(220).call(zoomRef.current.scaleBy, k)
   }
-  function fitView() {
-    initialFitDone.current = false
-    draw()
-  }
+  function fitView() { initialFitDone.current = false; draw() }
 
   return (
     <div ref={containerRef} className="relative w-full h-full overflow-hidden select-none tree-canvas-bg">
       <svg ref={svgRef} className="w-full h-full" style={{ minHeight: 500 }} />
 
-      {/* ── Zoom controls ──────────────────────────────────────────────── */}
       <div className="absolute bottom-5 right-5 flex flex-col gap-1.5 z-20" dir="ltr">
         {([
           { label: '+', fn: () => zoomBy(1.4),  title: 'تكبير' },
@@ -778,7 +668,6 @@ export function FamilyTreeCanvas({
         ))}
       </div>
 
-      {/* ── Legend ─────────────────────────────────────────────────────── */}
       <div className="absolute bottom-5 left-3 bg-white/90 backdrop-blur-sm rounded-xl px-2.5 py-2 border border-sand-100 shadow-sm space-y-1 z-20" dir="rtl">
         {([
           { color: MALE_ACCENT,   label: 'ذكر'   },
@@ -795,7 +684,6 @@ export function FamilyTreeCanvas({
         </div>
       </div>
 
-      {/* ── Zoom level indicator ───────────────────────────────────────── */}
       <div className="absolute top-3 left-3 bg-white/80 rounded-lg px-2 py-1 border border-sand-100 text-[10px] text-khartoum-500 font-mono z-10">
         {zoomLevel}%
       </div>
