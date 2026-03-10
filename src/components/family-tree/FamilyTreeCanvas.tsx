@@ -77,6 +77,7 @@ export function FamilyTreeCanvas({
 
   const [selectedId,  setSelectedId]  = useState<string | null>(null)
   const [zoomLevel,   setZoomLevel]   = useState(1)
+  const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set())
 
   const prevLayoutRef = useRef(layout)
   const filteredData = useMemo(() => data, [data])
@@ -107,10 +108,21 @@ export function FamilyTreeCanvas({
         .attr('x', '-20%').attr('y', '-20%').attr('width', '140%').attr('height', '150%')
       f2.append('feDropShadow').attr('dx', 0).attr('dy', 2).attr('stdDeviation', 5).attr('flood-color', 'rgba(217,119,6,0.28)')
 
-      // ── Hierarchy ───────────────────────────────────────────────────────
+      // ── Hierarchy (collapsed nodes hide their children) ────────────────
       const root = d3.hierarchy<ExtTreeNode>(
         filteredData as ExtTreeNode,
-        d => d.children as ExtTreeNode[] | undefined,
+        d => {
+          const kids = d.children as ExtTreeNode[] | undefined
+          if (!kids || kids.length === 0) return undefined
+          if (collapsedIds.has(d.id)) {
+            d._collapsed = true
+            d._childCount = kids.length
+            return undefined
+          }
+          d._collapsed = false
+          d._childCount = kids.length
+          return kids
+        },
       )
 
       type HNode = d3.HierarchyPointNode<ExtTreeNode>
@@ -600,8 +612,47 @@ export function FamilyTreeCanvas({
         const isSel = person.id === selectedId
         renderCoupleNode(this, person, isSel)
 
+        const totalKids = person._childCount ?? (person.children?.length ?? 0)
+        const isCollapsed = person._collapsed === true
+
+        // ── Collapse / expand toggle ──────────────────────────────────────
+        if (totalKids > 0) {
+          const toggleY = CH / 2 + 14
+          const toggleG = d3.select(this).append('g')
+            .attr('class', 'collapse-btn')
+            .attr('transform', `translate(0,${toggleY})`)
+            .style('cursor', 'pointer')
+            .on('click', (ev) => {
+              ev.stopPropagation()
+              setCollapsedIds(prev => {
+                const next = new Set(prev)
+                if (next.has(person.id)) next.delete(person.id)
+                else next.add(person.id)
+                return next
+              })
+            })
+
+          if (isCollapsed) {
+            toggleG.append('rect')
+              .attr('x', -22).attr('y', -10).attr('width', 44).attr('height', 20)
+              .attr('rx', 10).attr('fill', '#f59e0b').attr('stroke', 'white').attr('stroke-width', 1.5)
+            toggleG.append('text')
+              .attr('text-anchor', 'middle').attr('y', 4.5)
+              .attr('font-size', 10).attr('font-weight', '700').attr('fill', 'white')
+              .text(`+${totalKids}`)
+          } else {
+            toggleG.append('circle')
+              .attr('r', 9).attr('fill', '#e5e7eb').attr('stroke', '#9ca3af').attr('stroke-width', 1)
+            toggleG.append('text')
+              .attr('text-anchor', 'middle').attr('y', 3.5)
+              .attr('font-size', 11).attr('font-weight', '600').attr('fill', '#6b7280')
+              .text('−')
+          }
+        }
+
+        // ── Add button ────────────────────────────────────────────────────
         if (!readOnly) {
-          const addBtnY = CH / 2 + ((person.children?.length ?? 0) > 0 ? 24 : 6)
+          const addBtnY = CH / 2 + (totalKids > 0 ? 32 : 6)
           const addBtn = d3.select(this).append('g')
             .attr('class', 'add-btn')
             .attr('transform', `translate(0,${addBtnY})`)
@@ -634,7 +685,7 @@ export function FamilyTreeCanvas({
       // eslint-disable-next-line no-console
       console.error('[FamilyTreeCanvas] draw error', err)
     }
-  }, [filteredData, selectedId, language, readOnly, onNodeClick, onNodeAdd, onViewSubtree, layout, enableWifeBranch])
+  }, [filteredData, selectedId, language, readOnly, onNodeClick, onNodeAdd, onViewSubtree, layout, enableWifeBranch, collapsedIds])
 
   useEffect(() => { draw() }, [draw])
 
