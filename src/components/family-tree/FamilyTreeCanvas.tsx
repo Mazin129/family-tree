@@ -87,6 +87,18 @@ export function FamilyTreeCanvas({
     prevLayoutRef.current = layout
   }
 
+  // Centered classic: by default keep tree minimized (all nodes with children collapsed)
+  useEffect(() => {
+    if (layout !== 'centeredClassic' || !filteredData) return
+    const ids = new Set<string>()
+    function collect(node: TreeNode) {
+      if ((node.children?.length ?? 0) > 0) ids.add(node.id)
+      node.children?.forEach(collect)
+    }
+    collect(filteredData)
+    setCollapsedIds(ids)
+  }, [layout, filteredData])
+
   // ═══════════════════════════════════════════════════════════════════════════
   //  DRAW
   // ═══════════════════════════════════════════════════════════════════════════
