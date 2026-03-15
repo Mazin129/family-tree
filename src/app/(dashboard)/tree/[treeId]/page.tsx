@@ -1,5 +1,6 @@
 'use client'
 
+import dynamic from 'next/dynamic'
 import { useEffect, useState, useCallback } from 'react'
 import { useParams } from 'next/navigation'
 import {
@@ -10,6 +11,11 @@ import {
   BulkAddMembersModal,
   ShareModal,
 } from '@/components/family-tree'
+
+const FamilyTree3DCanvas = dynamic(
+  () => import('@/components/family-tree').then(m => ({ default: m.FamilyTree3DCanvas })),
+  { ssr: false }
+)
 import { AIInsightsPanel }   from '@/components/ai/AIInsightsPanel'
 import { toast }             from 'sonner'
 import {
@@ -20,7 +26,7 @@ import type { TreeNode, TreeMember, FamilyTree } from '@/types'
 import Link from 'next/link'
 
 type Tab = 'tree' | 'members' | 'ai'
-type LayoutStyle = 'vertical' | 'centeredClassic'
+type LayoutStyle = 'vertical' | 'centeredClassic' | 'heritage3d'
 
 export default function TreeViewPage() {
   const params = useParams()
@@ -211,6 +217,7 @@ export default function TreeViewPage() {
           >
             <option value="centeredClassic">مركزية كلاسيكية</option>
             <option value="vertical">عمودية</option>
+            <option value="heritage3d">شجرة 3D</option>
           </select>
         </div>
       </div>
@@ -225,7 +232,7 @@ export default function TreeViewPage() {
             treeData
               ? (
                 <div className="relative w-full h-full flex flex-col">
-                  {subtreeRoot && (
+                  {subtreeRoot && layoutStyle !== 'heritage3d' && (
                     <div className="shrink-0 flex items-center gap-2 px-4 py-2 bg-white/95 backdrop-blur-sm border-b border-sand-100" dir="rtl">
                       <button
                         type="button"
@@ -245,15 +252,26 @@ export default function TreeViewPage() {
                     </div>
                   )}
                   <div className="flex-1 min-h-0">
-                    <FamilyTreeCanvas
-                      data={subtreeRoot ?? treeData}
-                      onNodeClick={handleNodeClick}
-                      onNodeAdd={handleNodeAdd}
-                      onViewSubtree={handleViewSubtree}
-                      language="ar"
-                      layout={layoutStyle}
-                      enableWifeBranch
-                    />
+                    {layoutStyle === 'heritage3d' ? (
+                      <FamilyTree3DCanvas
+                        data={subtreeRoot ?? treeData}
+                        onNodeClick={handleNodeClick}
+                        onNodeAdd={handleNodeAdd}
+                        onViewSubtree={handleViewSubtree}
+                        language="ar"
+                        readOnly={false}
+                      />
+                    ) : (
+                      <FamilyTreeCanvas
+                        data={subtreeRoot ?? treeData}
+                        onNodeClick={handleNodeClick}
+                        onNodeAdd={handleNodeAdd}
+                        onViewSubtree={handleViewSubtree}
+                        language="ar"
+                        layout={layoutStyle}
+                        enableWifeBranch
+                      />
+                    )}
                   </div>
                 </div>
               )

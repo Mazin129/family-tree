@@ -1,4 +1,5 @@
 export { FamilyTreeCanvas } from './FamilyTreeCanvas'
+export { FamilyTree3DCanvas } from './FamilyTree3DCanvas'
 export { MemberCard } from './MemberCard'
 export { AddMemberModal } from './AddMemberModal'
 export { EditMemberModal } from './EditMemberModal'
